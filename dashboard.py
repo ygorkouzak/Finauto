@@ -62,7 +62,7 @@ def modal_nova_transacao():
         data = st.date_input("Data", value=datetime.now().date())
         valor = st.number_input("Valor (R$)", min_value=0.01, step=10.0, format="%.2f")
         responsavel_nova = st.selectbox("Responsável", ["Y", "M", "MY"])
-        fonte = st.selectbox("Fonte", ["Dinheiro", "Cartão Crédito", "PIX"])
+        fonte = st.selectbox("Fonte", ["Dinheiro", "Cartão Crédito"])
 
     with col2:
         if mov == "Saída":
@@ -133,7 +133,7 @@ def modal_editar_transacao(transacao):
         responsavel_ed = st.selectbox("Responsável", resp_opts,
                                       index=resp_opts.index(transacao["responsavel"])
                                       if transacao["responsavel"] in resp_opts else 0)
-        fonte_opts = ["Dinheiro", "Cartão Crédito", "PIX"]
+        fonte_opts = ["Dinheiro", "Cartão Crédito"]
         fonte = st.selectbox("Fonte", fonte_opts,
                              index=fonte_opts.index(transacao["fonte"])
                              if transacao["fonte"] in fonte_opts else 0)
@@ -590,7 +590,7 @@ editado = st.data_editor(
         "responsavel": st.column_config.SelectboxColumn(
             options=["Y", "M", "MY"], required=True),
         "fonte": st.column_config.SelectboxColumn(
-            options=["Dinheiro", "Cartão Crédito", "PIX"], required=True),
+            options=["Dinheiro", "Cartão Crédito"], required=True),
         "status": st.column_config.SelectboxColumn(
             options=["Pago", "Recebido", "A pagar", "A receber", "Atrasado"],
             required=True),

@@ -24,7 +24,7 @@ CAMPOS_OBRIGATORIOS = {
 }
 MOVIMENTACOES = {"Entrada", "Saída"}
 RESPONSAVEIS = {"Y", "M", "MY"}
-FONTES = {"Dinheiro", "Cartão Crédito", "PIX"}
+FONTES = {"Dinheiro", "Cartão Crédito"}
 TIPOS_SAIDA = {"P. Unico", "D. Fixa", "Parcelado"}
 TIPOS_ENTRADA = {"Receita Fixa", "Receita Variável"}
 
@@ -102,19 +102,26 @@ Hoje é {data_hoje}.
 Mensagem do usuário:
 "{mensagem}"
 
-Devolva APENAS um JSON válido com os campos abaixo:
+Devolva APENAS um JSON válido com os campos abaixo.
+REGRA CRÍTICA: os campos com valores fixos só aceitam EXATAMENTE os valores listados — qualquer outro valor é inválido.
 
-- "movimentacao": "Entrada" (ganho) ou "Saída" (gasto).
-- "responsavel": "Y" (eu), "M" (esposa) ou "MY" (compartilhado). Padrão: "Y".
-- "tipo": para Saída use "P. Unico", "D. Fixa" ou "Parcelado".
-          Para Entrada use "Receita Fixa" ou "Receita Variável".
-- "categoria": escolha a mais adequada da lista abaixo. Proibido inventar categorias novas.{_cats_instrucao}
-- "descricao": local, item ou pagador (ex. "iFood", "Mercado").
-- "valor": número decimal, sem símbolo (ex. 27.50). Vírgula vira ponto.
-- "parcelas": "1" à vista; "N/T" se parcelado (ex. "1/4").
-- "data": "AAAA-MM-DD". "hoje" → {data_hoje}.
-- "fonte": "Dinheiro", "Cartão Crédito" ou "PIX". Padrão: "Dinheiro".
-- "status": Para Saída use "Pago" (já pago), "A pagar" (futuro), ou "Atrasado" (vencido não pago). Para Entrada use "Recebido" (já caiu), "A receber" (futuro), ou "Atrasado" (devia ter caído e não caiu). Se a mensagem não indicar, use "Pago" ou "Recebido".
+- "movimentacao": EXATAMENTE "Entrada" ou "Saída". Nenhum outro valor.
+- "responsavel": EXATAMENTE "Y", "M" ou "MY". Padrão: "Y". Nenhum outro valor.
+- "tipo":
+    Se Saída → EXATAMENTE "P. Unico", "D. Fixa" ou "Parcelado". Nenhum outro valor.
+    Se Entrada → EXATAMENTE "Receita Fixa" ou "Receita Variável". Nenhum outro valor.
+- "categoria": escolha EXATAMENTE uma da lista abaixo. Proibido criar ou adaptar categorias.{_cats_instrucao}
+- "descricao": nome do local, item ou pagador (ex. "iFood", "Mercado").
+- "valor": número decimal sem símbolo (ex. 27.50). Vírgula → ponto.
+- "parcelas": EXATAMENTE "1" se à vista, ou formato "N/T" se parcelado (ex. "2/10"). Nenhum outro formato.
+- "data": formato EXATO "AAAA-MM-DD". Hoje = {data_hoje}.
+- "fonte": EXATAMENTE "Dinheiro" ou "Cartão Crédito". Padrão: "Dinheiro".
+    IMPORTANTE: PIX, transferência, débito ou qualquer outro meio → use "Dinheiro".
+    Só use "Cartão Crédito" se explicitamente mencionado cartão de crédito ou crédito parcelado.
+- "status":
+    Se Saída → EXATAMENTE "Pago", "A pagar" ou "Atrasado". Nenhum outro valor.
+    Se Entrada → EXATAMENTE "Recebido", "A receber" ou "Atrasado". Nenhum outro valor.
+    Se não informado → use "Pago" (Saída) ou "Recebido" (Entrada).
 
 Exemplos:
 
@@ -125,7 +132,7 @@ Entrada: "comprei fone de 800 em 4x no cartão"
 Saída: {{"movimentacao":"Saída","responsavel":"Y","tipo":"Parcelado","categoria":"Eletrônicos","descricao":"Fone","valor":200.00,"parcelas":"1/4","data":"{data_hoje}","fonte":"Cartão Crédito","status":"Pago"}}
 
 Entrada: "recebi 1900 da Alvank via pix"
-Saída: {{"movimentacao":"Entrada","responsavel":"Y","tipo":"Receita Variável","categoria":"Freelancer","descricao":"Alvank","valor":1900.00,"parcelas":"1","data":"{data_hoje}","fonte":"PIX","status":"Recebido"}}
+Saída: {{"movimentacao":"Entrada","responsavel":"Y","tipo":"Receita Variável","categoria":"Freelancer","descricao":"Alvank","valor":1900.00,"parcelas":"1","data":"{data_hoje}","fonte":"Dinheiro","status":"Recebido"}}
 """
 
     try:
@@ -170,22 +177,25 @@ def extrair_dados_com_ia_imagem(mensagem, bytes_imagem, tipo_mime="image/jpeg", 
     )
 
     prompt_texto = f"""
-Você é um assistente financeiro. Analise esta imagem (nota fiscal, comprovante de pagamento ou foto de despesa).
+Você é um assistente financeiro. Analise esta imagem (nota fiscal, comprovante ou foto de despesa).
 Hoje é {data_hoje}.
 Mensagem adicional do usuário: "{mensagem}"
 
-Devolva APENAS um JSON válido com os campos:
+Devolva APENAS um JSON válido. Os campos com valores fixos só aceitam EXATAMENTE os valores listados.
 
-- "movimentacao": "Entrada" ou "Saída".
-- "responsavel": "Y", "M" ou "MY". Padrão: "Y".
-- "tipo": para Saída use "P. Unico", "D. Fixa" ou "Parcelado". Para Entrada use "Receita Fixa" ou "Receita Variável".
-- "categoria": escolha a mais adequada da lista abaixo. Proibido inventar categorias novas.{_cats_instrucao}
+- "movimentacao": EXATAMENTE "Entrada" ou "Saída".
+- "responsavel": EXATAMENTE "Y", "M" ou "MY". Padrão: "Y".
+- "tipo":
+    Se Saída → EXATAMENTE "P. Unico", "D. Fixa" ou "Parcelado".
+    Se Entrada → EXATAMENTE "Receita Fixa" ou "Receita Variável".
+- "categoria": EXATAMENTE uma da lista abaixo. Proibido criar ou adaptar.{_cats_instrucao}
 - "descricao": nome do estabelecimento ou pagador (ex. "Supermercado Extra").
 - "valor": número decimal sem símbolo (ex. 27.50).
-- "parcelas": "1" à vista ou "N/T" se parcelado.
-- "data": "AAAA-MM-DD". Se não identificar, use {data_hoje}.
-- "fonte": "Dinheiro", "Cartão Crédito" ou "PIX". Padrão: "Dinheiro".
-- "status": "Pago" para Saída ou "Recebido" para Entrada (quando não especificado).
+- "parcelas": EXATAMENTE "1" se à vista ou formato "N/T" (ex. "2/10").
+- "data": formato EXATO "AAAA-MM-DD". Se não identificar, use {data_hoje}.
+- "fonte": EXATAMENTE "Dinheiro" ou "Cartão Crédito". Padrão: "Dinheiro".
+    PIX, débito, transferência → use "Dinheiro". Só "Cartão Crédito" se explicitamente indicado.
+- "status": Se Saída → "Pago", "A pagar" ou "Atrasado". Se Entrada → "Recebido", "A receber" ou "Atrasado".
 """
 
     try:
