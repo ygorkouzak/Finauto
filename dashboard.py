@@ -142,12 +142,55 @@ div[data-testid="stAlert"] {
     border: 1px solid !important;
 }
 
+/* ── CALENDÁRIO ──────────────────────────────────────────────── */
+[data-testid="stColumns"]:has(> [data-testid="stColumn"]:nth-child(7)) .stButton > button {
+    min-height: 68px !important;
+    white-space: pre-line !important;
+    text-align: left !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+    line-height: 1.55 !important;
+    border-radius: 9px !important;
+    transition: background 0.15s, border-color 0.15s !important;
+}
+/* Dia selecionado */
+[data-testid="stColumns"]:has(> [data-testid="stColumn"]:nth-child(7)) .stButton > button[kind="primary"] {
+    background: rgba(99,102,241,0.22) !important;
+    border: 1px solid #6366f1 !important;
+    color: #e8eaf0 !important;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.18) !important;
+}
+/* Hover dias normais */
+[data-testid="stColumns"]:has(> [data-testid="stColumn"]:nth-child(7)) .stButton > button:not([kind="primary"]):hover {
+    background: rgba(255,255,255,0.05) !important;
+    border-color: rgba(255,255,255,0.18) !important;
+}
+/* Responsivo: telas menores */
+@media (max-width: 768px) {
+    [data-testid="stColumns"]:has(> [data-testid="stColumn"]:nth-child(7)) .stButton > button {
+        min-height: 52px !important;
+        font-size: 9.5px !important;
+        padding: 5px 6px !important;
+    }
+}
+
 /* ── ESCONDER MENU / FOOTER ──────────────────────────────────── */
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 header[data-testid="stHeader"] { background: rgba(15,17,23,0.95) !important; backdrop-filter: blur(16px); }
 </style>
 """, unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# Estado do calendário: dia selecionado
+# ---------------------------------------------------------------------------
+if "cal_dia_sel" not in st.session_state:
+    st.session_state.cal_dia_sel = None
+if "cal_mes_prev" not in st.session_state:
+    st.session_state.cal_mes_prev = None
+
 
 @st.cache_data(ttl=300)
 def _get_categorias(movimentacao=None):
@@ -710,66 +753,131 @@ else:
 st.divider()
 
 # ---------------------------------------------------------------------------
-# Calendário (só quando um mês está selecionado)
+# Calendário interativo (só quando um mês está selecionado)
 # ---------------------------------------------------------------------------
 if mes_sel != "Todos":
-    st.subheader(f"Calendário de {titulo_periodo}")
+    # Reseta seleção ao trocar de mês/ano
+    chave_periodo = (ano, mes_sel)
+    if st.session_state.cal_mes_prev != chave_periodo:
+        st.session_state.cal_dia_sel = None
+        st.session_state.cal_mes_prev = chave_periodo
 
+    dia_sel = st.session_state.cal_dia_sel
+
+    # Cabeçalho
+    col_titulo_cal, col_clear = st.columns([5, 2])
+    with col_titulo_cal:
+        st.subheader(f"Calendário de {titulo_periodo}")
+    with col_clear:
+        if dia_sel:
+            st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+            if st.button(
+                f"✕ {dia_sel:02d}/{MESES[mes_sel-1]} — limpar filtro",
+                key="cal_clear",
+                use_container_width=True,
+            ):
+                st.session_state.cal_dia_sel = None
+                st.rerun()
+
+    # Agrupamentos por dia
     por_dia = (
         df.groupby([df["data"].apply(lambda d: d.day), "movimentacao"])["valor"]
         .sum()
         .unstack(fill_value=0)
     )
     entradas_dia = por_dia.get("Entrada", {}).to_dict() if "Entrada" in por_dia.columns else {}
-    saidas_dia = por_dia.get("Saída", {}).to_dict() if "Saída" in por_dia.columns else {}
+    saidas_dia   = por_dia.get("Saída",   {}).to_dict() if "Saída"   in por_dia.columns else {}
 
-    cal = calendar.Calendar(firstweekday=0)
-    semanas = cal.monthdayscalendar(ano, mes_sel)
+    cal_obj   = calendar.Calendar(firstweekday=0)
+    semanas   = cal_obj.monthdayscalendar(ano, mes_sel)
     DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    hoje_dia  = hoje.day if (mes_sel == hoje.month and ano == hoje.year) else -1
 
+    # Linha de cabeçalho dos dias da semana
     cols_header = st.columns(7)
     for i, nome in enumerate(DIAS_SEMANA):
-        cols_header[i].markdown(f"**{nome}**")
+        cor_header = "#a5b4fc" if i >= 5 else "rgba(232,234,240,0.4)"
+        cols_header[i].markdown(
+            f"<div style='text-align:center;font-size:11px;font-weight:600;"
+            f"letter-spacing:0.06em;color:{cor_header};padding:4px 0'>{nome}</div>",
+            unsafe_allow_html=True,
+        )
 
+    # Células dos dias
     for semana in semanas:
         cols = st.columns(7)
         for i, dia in enumerate(semana):
             with cols[i]:
                 if dia == 0:
-                    st.markdown("&nbsp;", unsafe_allow_html=True)
+                    # Célula vazia estilizada
+                    st.markdown(
+                        "<div style='min-height:68px;border-radius:9px;"
+                        "background:rgba(255,255,255,0.02);margin:2px 0'></div>",
+                        unsafe_allow_html=True,
+                    )
                     continue
 
                 entrada = entradas_dia.get(dia, 0)
-                saida = saidas_dia.get(dia, 0)
+                saida   = saidas_dia.get(dia, 0)
+                e_hoje  = (dia == hoje_dia)
 
-                linhas = [f"**{dia}**"]
+                # Linha 1: número do dia + marcador de hoje
+                marcador_hoje = " 🔵" if e_hoje else ""
+                label_partes  = [f"{dia}{marcador_hoje}"]
+
                 if entrada:
-                    texto_e = formatar_moeda(entrada).replace("$", "\\$")
-                    linhas.append(f"<span style='color:#22c55e'>+{texto_e}</span>")
+                    v = formatar_moeda(entrada).replace("R$\u00a0", "").replace("R$ ", "")
+                    label_partes.append(f"+R${v}")
                 if saida:
-                    texto_s = formatar_moeda(saida).replace("$", "\\$")
-                    linhas.append(f"<span style='color:#ef4444'>-{texto_s}</span>")
+                    v = formatar_moeda(saida).replace("R$\u00a0", "").replace("R$ ", "")
+                    label_partes.append(f"-R${v}")
 
-                st.markdown("<br>".join(linhas), unsafe_allow_html=True)
+                label      = "\n".join(label_partes)
+                selecionado = (dia_sel == dia)
+
+                if st.button(
+                    label,
+                    key=f"cal_{ano}_{mes_sel}_{dia}",
+                    type="primary" if selecionado else "secondary",
+                    use_container_width=True,
+                ):
+                    # Toggle: clicar no mesmo dia desfaz a seleção
+                    st.session_state.cal_dia_sel = None if selecionado else dia
+                    st.rerun()
 
     st.divider()
 
 # ---------------------------------------------------------------------------
 # Tabela com edição e exclusão
 # ---------------------------------------------------------------------------
+
+# Aplica filtro de dia do calendário (se houver)
+_dia_ativo = st.session_state.get("cal_dia_sel") if mes_sel != "Todos" else None
+df_tabela = df[df["data"].apply(lambda d: d.day) == _dia_ativo].copy() if _dia_ativo else df.copy()
+
+# Subtítulo da tabela: mostra dia selecionado, se houver
+if _dia_ativo:
+    subtitulo_tab = f"{_dia_ativo:02d}/{MESES[mes_sel-1]}/{ano} — clique no dia novamente para limpar"
+    badge = (f"<span style='background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);"
+             f"border-radius:100px;padding:2px 10px;font-size:10px;color:#a5b4fc;"
+             f"margin-left:8px'>{_dia_ativo:02d}/{MESES[mes_sel-1]}</span>")
+else:
+    subtitulo_tab = titulo_periodo
+    badge = ""
+
 st.markdown(f"""
 <div style="background:#1a1b26;border:1px solid rgba(255,255,255,0.07);
             border-radius:10px 10px 0 0;padding:14px 18px 12px;
             border-bottom:1px solid rgba(255,255,255,0.07)">
-    <div style="font-size:13px;font-weight:600;color:#e8eaf0">Transações</div>
-    <div style="font-size:11px;color:rgba(232,234,240,0.35);margin-top:2px">{titulo_periodo}</div>
+    <div style="font-size:13px;font-weight:600;color:#e8eaf0">Transações{badge}</div>
+    <div style="font-size:11px;color:rgba(232,234,240,0.35);margin-top:2px">{subtitulo_tab}</div>
 </div>
 """, unsafe_allow_html=True)
 
 colunas_visiveis = ["id", "data", "movimentacao", "categoria", "descricao",
                     "valor", "responsavel", "fonte", "parcelas", "status"]
 
-df_editavel = df[colunas_visiveis].copy()
+df_editavel = df_tabela[colunas_visiveis].copy()
 df_editavel["data"] = df_editavel["data"].apply(lambda d: d.strftime("%d/%m/%Y"))
 df_editavel["excluir"] = False
 
@@ -803,7 +911,7 @@ col_s, col_d = st.columns(2)
 with col_s:
     if st.button("💾 Salvar alterações", type="primary", use_container_width=True):
         alteracoes = 0
-        original = df[colunas_visiveis].set_index("id")
+        original = df_tabela[colunas_visiveis].set_index("id")
         novo = editado.set_index("id")
 
         for id_trans in novo.index:
