@@ -21,20 +21,133 @@ from utils import formatar_moeda, enviar_lembrete_twilio
 
 st.set_page_config(page_title="FinAuto", page_icon="💰", layout="wide")
 
-st.markdown(
-    """
-    <style>
-    /* Neutraliza fundo vermelho dos pills do multiselect */
-    span[data-baseweb="tag"] {
-        background-color: #334155 !important;
-    }
-    span[data-baseweb="tag"] span {
-        color: #f1f5f9 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"], .stApp {
+    font-family: 'Inter', sans-serif !important;
+}
+
+/* ── KPI CARDS ──────────────────────────────────────────────── */
+div[data-testid="metric-container"] {
+    background: #1a1b26 !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 10px !important;
+    padding: 16px 18px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+}
+div[data-testid="stMetricLabel"] > div {
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    color: rgba(232,234,240,0.45) !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+}
+div[data-testid="stMetricValue"] > div {
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.03em !important;
+    color: #e8eaf0 !important;
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────────── */
+section[data-testid="stSidebar"] {
+    background: #151621 !important;
+    border-right: 1px solid rgba(255,255,255,0.07) !important;
+}
+section[data-testid="stSidebar"] .stSelectbox label,
+section[data-testid="stSidebar"] .stMultiSelect label,
+section[data-testid="stSidebar"] .stTextInput label {
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.07em !important;
+    text-transform: uppercase !important;
+    color: rgba(232,234,240,0.4) !important;
+}
+
+/* ── INPUTS ──────────────────────────────────────────────────── */
+.stSelectbox > div > div,
+.stMultiSelect > div > div,
+.stTextInput > div > div > input {
+    background: #1e2030 !important;
+    border: 1px solid rgba(255,255,255,0.11) !important;
+    border-radius: 7px !important;
+    color: #e8eaf0 !important;
+    font-size: 12px !important;
+}
+
+/* Multiselect tags */
+span[data-baseweb="tag"] {
+    background-color: rgba(99,102,241,0.18) !important;
+    border: 1px solid rgba(99,102,241,0.3) !important;
+    border-radius: 100px !important;
+}
+span[data-baseweb="tag"] span {
+    color: #a5b4fc !important;
+    font-size: 11px !important;
+}
+
+/* ── BOTÕES ──────────────────────────────────────────────────── */
+.stButton > button[kind="primary"] {
+    background: #6366f1 !important;
+    border: none !important;
+    border-radius: 7px !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    letter-spacing: 0.01em !important;
+    transition: background 0.15s !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: #4f46e5 !important;
+}
+.stButton > button[kind="secondary"],
+.stButton > button:not([kind="primary"]) {
+    background: #1e2030 !important;
+    border: 1px solid rgba(255,255,255,0.11) !important;
+    border-radius: 7px !important;
+    color: rgba(232,234,240,0.6) !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+.stButton > button:not([kind="primary"]):hover {
+    background: rgba(255,255,255,0.06) !important;
+    color: #e8eaf0 !important;
+}
+
+/* ── TABELA ──────────────────────────────────────────────────── */
+div[data-testid="stDataEditor"],
+div[data-testid="stDataFrame"] {
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+}
+
+/* ── DIVIDER ─────────────────────────────────────────────────── */
+hr {
+    border-color: rgba(255,255,255,0.07) !important;
+    margin: 20px 0 !important;
+}
+
+/* ── SUBHEADERS ──────────────────────────────────────────────── */
+h2, h3 {
+    letter-spacing: -0.02em !important;
+    font-weight: 700 !important;
+    color: #e8eaf0 !important;
+}
+
+/* ── ALERTAS ─────────────────────────────────────────────────── */
+div[data-testid="stAlert"] {
+    border-radius: 9px !important;
+    border: 1px solid !important;
+}
+
+/* ── ESCONDER MENU / FOOTER ──────────────────────────────────── */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header[data-testid="stHeader"] { background: rgba(15,17,23,0.95) !important; backdrop-filter: blur(16px); }
+</style>
+""", unsafe_allow_html=True)
 
 @st.cache_data(ttl=300)
 def _get_categorias(movimentacao=None):
@@ -42,6 +155,16 @@ def _get_categorias(movimentacao=None):
         return listar_categorias(movimentacao)
     except Exception:
         return []
+
+
+def kpi_card(label, valor, cor="#e8eaf0"):
+    return f"""
+    <div style="background:#1a1b26;border:1px solid rgba(255,255,255,0.07);
+                border-radius:10px;padding:16px 18px;box-shadow:0 4px 20px rgba(0,0,0,0.3)">
+        <div style="font-size:11px;font-weight:600;color:rgba(232,234,240,0.4);
+                    letter-spacing:0.07em;text-transform:uppercase;margin-bottom:8px">{label}</div>
+        <div style="font-size:22px;font-weight:700;letter-spacing:-0.03em;color:{cor}">{valor}</div>
+    </div>"""
 
 
 st.title("💰 FinAuto — Dashboard")
@@ -311,9 +434,13 @@ saldo = entradas - saidas
 # KPIs principais
 # ---------------------------------------------------------------------------
 col1, col2, col3 = st.columns(3)
-col1.metric("Entradas", formatar_moeda(entradas))
-col2.metric("Saídas", formatar_moeda(saidas))
-col3.metric("Saldo", formatar_moeda(saldo))
+with col1:
+    st.markdown(kpi_card("Entradas", formatar_moeda(entradas), "#22c55e"), unsafe_allow_html=True)
+with col2:
+    st.markdown(kpi_card("Saídas", formatar_moeda(saidas), "#ef4444"), unsafe_allow_html=True)
+with col3:
+    cor_saldo = "#22c55e" if saldo >= 0 else "#ef4444"
+    st.markdown(kpi_card("Saldo", formatar_moeda(saldo), cor_saldo), unsafe_allow_html=True)
 
 st.divider()
 
@@ -332,12 +459,15 @@ taxa_poupanca = (saldo_real / entradas_pagas * 100) if entradas_pagas > 0 else 0
 compromet_fixa = (saidas_fixas / entradas_pagas * 100) if entradas_pagas > 0 else 0
 
 col_a, col_b, col_c = st.columns(3)
-col_a.metric("Saldo realizado", formatar_moeda(saldo_real),
-             help="Só conta o que já foi Pago/Recebido.")
-col_b.metric("Taxa de poupança", f"{taxa_poupanca:.1f}%",
-             help="Saldo realizado / Entradas recebidas. Saudável: >20%.")
-col_c.metric("Comprometimento com D. Fixa", f"{compromet_fixa:.1f}%",
-             help="Despesas fixas / Entradas recebidas. Crítico: >50%.")
+with col_a:
+    cor_sr = "#22c55e" if saldo_real >= 0 else "#ef4444"
+    st.markdown(kpi_card("Saldo realizado", formatar_moeda(saldo_real), cor_sr), unsafe_allow_html=True)
+with col_b:
+    cor_tp = "#22c55e" if taxa_poupanca >= 20 else ("#f59e0b" if taxa_poupanca >= 10 else "#ef4444")
+    st.markdown(kpi_card("Taxa de poupança", f"{taxa_poupanca:.1f}%", cor_tp), unsafe_allow_html=True)
+with col_c:
+    cor_cf = "#ef4444" if compromet_fixa >= 50 else ("#f59e0b" if compromet_fixa >= 35 else "#22c55e")
+    st.markdown(kpi_card("Comprometimento D. Fixa", f"{compromet_fixa:.1f}%", cor_cf), unsafe_allow_html=True)
 
 st.divider()
 
@@ -387,6 +517,26 @@ if busca:
     atrasadas = [t for t in atrasadas if _busca in t.get("descricao", "").lower()]
     proximas  = [t for t in proximas  if _busca in t.get("descricao", "").lower()]
 
+total_atrasado = sum(float(t["valor"]) for t in atrasadas) if atrasadas else 0
+if atrasadas:
+    cor_barra = "#ef4444"
+    texto_barra = f"⚠️ {formatar_moeda(total_atrasado).replace('$', chr(92) + '$')} em atraso"
+else:
+    cor_barra = "#22c55e"
+    texto_barra = "✓ Nada atrasado."
+
+st.markdown(f"""
+<div style="background:#1a1b26;border:1px solid rgba(255,255,255,0.07);
+            border-radius:10px;overflow:hidden;height:44px;
+            display:flex;align-items:center;margin-bottom:16px">
+    <div style="height:100%;width:100%;background:{cor_barra};
+                display:flex;align-items:center;padding-left:18px;
+                font-size:13px;font-weight:600;color:#fff">
+        {texto_barra}
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 col_atr, col_prox = st.columns(2)
 
 with col_atr:
@@ -407,8 +557,11 @@ with col_prox:
         prev_entrada = df_prox[df_prox["movimentacao"] == "Entrada"]["valor"].sum()
         prev_saida = df_prox[df_prox["movimentacao"] == "Saída"]["valor"].sum()
         c1, c2 = st.columns(2)
-        c1.metric("📥 A receber", formatar_moeda(prev_entrada))
-        c2.metric("📤 A pagar", formatar_moeda(prev_saida))
+        with c1:
+            st.markdown(kpi_card("📥 A receber", formatar_moeda(prev_entrada), "#3b82f6"), unsafe_allow_html=True)
+        with c2:
+            st.markdown(kpi_card("📤 A pagar", formatar_moeda(prev_saida), "#f59e0b"), unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
         _render_lista_com_quitar("Próximos 30 dias", proximas, "prox")
     else:
         st.subheader("📅 Próximos 30 dias")
@@ -427,8 +580,10 @@ def _grafico_barras(df_valor, cor):
         y=alt.Y("categoria:N", sort="-x", title=""),
     )
 
-    barras = base.mark_bar(color=cor).encode(
-        x=alt.X("valor:Q", title="R$", axis=alt.Axis(format=",.0f")),
+    barras = base.mark_bar(color=cor, cornerRadiusTopRight=4, cornerRadiusBottomRight=4).encode(
+        x=alt.X("valor:Q", title="R$",
+                axis=alt.Axis(format=",.0f", gridColor="rgba(255,255,255,0.04)",
+                              labelColor="rgba(232,234,240,0.5)", tickColor="transparent")),
         tooltip=[
             alt.Tooltip("categoria:N", title="Categoria"),
             alt.Tooltip("valor:Q", title="Valor", format=",.2f"),
@@ -436,16 +591,20 @@ def _grafico_barras(df_valor, cor):
     )
 
     rotulos = base.mark_text(
-        align="left",
-        baseline="middle",
-        dx=4,
-        color="#e5e7eb",
+        align="left", baseline="middle", dx=6,
+        color="rgba(232,234,240,0.75)", fontSize=11, fontWeight=500,
     ).encode(
         x=alt.X("valor:Q"),
         text=alt.Text("valor_label:N"),
     )
 
-    return (barras + rotulos).properties(height=alt.Step(28))
+    return (
+        (barras + rotulos)
+        .properties(height=alt.Step(30))
+        .configure_view(strokeOpacity=0, fill="#1a1b26")
+        .configure_axis(labelColor="rgba(232,234,240,0.5)", titleColor="rgba(232,234,240,0.4)",
+                        gridColor="rgba(255,255,255,0.04)", domainColor="rgba(255,255,255,0.07)")
+    )
 
 col_esq, col_dir = st.columns(2)
 
@@ -531,7 +690,21 @@ else:
         text=alt.Text("valor_label:N"),
     )
 
-    grafico = (linhas + rotulos_linha).properties(height=350)
+    grafico = (
+        (linhas + rotulos_linha)
+        .properties(height=350)
+        .configure_view(strokeOpacity=0, fill="#1a1b26")
+        .configure_axis(
+            labelColor="rgba(232,234,240,0.5)",
+            titleColor="rgba(232,234,240,0.4)",
+            gridColor="rgba(255,255,255,0.04)",
+            domainColor="rgba(255,255,255,0.07)",
+        )
+        .configure_legend(
+            labelColor="rgba(232,234,240,0.7)",
+            titleColor="rgba(232,234,240,0.4)",
+        )
+    )
     st.altair_chart(grafico, use_container_width=True)
 
 st.divider()
@@ -584,7 +757,14 @@ if mes_sel != "Todos":
 # ---------------------------------------------------------------------------
 # Tabela com edição e exclusão
 # ---------------------------------------------------------------------------
-st.subheader(f"Transações de {titulo_periodo}")
+st.markdown(f"""
+<div style="background:#1a1b26;border:1px solid rgba(255,255,255,0.07);
+            border-radius:10px 10px 0 0;padding:14px 18px 12px;
+            border-bottom:1px solid rgba(255,255,255,0.07)">
+    <div style="font-size:13px;font-weight:600;color:#e8eaf0">Transações</div>
+    <div style="font-size:11px;color:rgba(232,234,240,0.35);margin-top:2px">{titulo_periodo}</div>
+</div>
+""", unsafe_allow_html=True)
 
 colunas_visiveis = ["id", "data", "movimentacao", "categoria", "descricao",
                     "valor", "responsavel", "fonte", "parcelas", "status"]
@@ -621,7 +801,7 @@ editado = st.data_editor(
 col_s, col_d = st.columns(2)
 
 with col_s:
-    if st.button("💾 Salvar alterações", type="primary", width="stretch"):
+    if st.button("💾 Salvar alterações", type="primary", use_container_width=True):
         alteracoes = 0
         original = df[colunas_visiveis].set_index("id")
         novo = editado.set_index("id")
@@ -650,7 +830,7 @@ with col_s:
             st.info("Nenhuma alteração detectada.")
 
 with col_d:
-    if st.button("🗑️ Excluir marcadas", width="stretch"):
+    if st.button("🗑️ Excluir marcadas", use_container_width=True):
         para_excluir = editado[editado["excluir"]]["id"].tolist()
         if not para_excluir:
             st.info("Nenhuma transação marcada para exclusão.")
