@@ -9,3 +9,4 @@ openpyxl
 streamlit
 altair
 requests
+groq
