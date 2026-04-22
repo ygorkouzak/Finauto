@@ -13,6 +13,7 @@ from db import (
     marcar_como_quitado,
     inserir_transacao,
     listar_categorias,
+    gerar_recorrencias,
     gerar_recorrencias_retroativas,
 )
 
@@ -100,8 +101,16 @@ def modal_nova_transacao():
                 "status": status,
             }
             try:
-                inserir_transacao(dados_novos)
-                st.success("Transação adicionada!")
+                id_novo = inserir_transacao(dados_novos)
+                msg = "Transação adicionada!"
+                if dados_novos["tipo"] in ("D. Fixa", "Receita Fixa", "Parcelado"):
+                    try:
+                        qtd = gerar_recorrencias(id_novo)
+                        if qtd:
+                            msg += f" +{qtd} recorrências geradas."
+                    except Exception as err_rec:
+                        msg += f" (aviso recorrências: {err_rec})"
+                st.success(msg)
                 st.rerun()
             except Exception as err:
                 st.error(f"Erro: {err}")
