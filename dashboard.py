@@ -14,7 +14,6 @@ from db import (
     inserir_transacao,
     listar_categorias,
     gerar_recorrencias,
-    gerar_recorrencias_retroativas,
 )
 
 from utils import formatar_moeda, enviar_lembrete_twilio
@@ -255,9 +254,25 @@ def modal_nova_transacao():
             status_opts = ["Recebido", "A receber", "Atrasado"]
 
         status = st.selectbox("Status", status_opts)
-        parcelas = st.text_input("Parcelas", value="1", help="'1' à vista, ou 'N/T' (ex: '2/10')")
+
+        if tipo == "Parcelado":
+            cp, ct = st.columns(2)
+            with cp:
+                parc_atual = st.number_input("Parcela atual", min_value=1, max_value=999, value=1, step=1)
+            with ct:
+                parc_total = st.number_input("Total de parcelas", min_value=2, max_value=999, value=12, step=1)
+            parcelas = f"{int(parc_atual)}/{int(parc_total)}"
+            restantes = int(parc_total) - int(parc_atual)
+            if restantes > 0:
+                st.caption(f"{restantes} parcela(s) seguinte(s) serão geradas automaticamente.")
+        else:
+            parcelas = "1"
+
         _cats = _get_categorias(mov)
         categoria = st.selectbox("Categoria", _cats if _cats else ["—"])
+
+    if tipo in ("D. Fixa", "Receita Fixa"):
+        st.info("Recorrências mensais serão geradas automaticamente por 12 meses.")
 
     descricao = st.text_input("Descrição", placeholder="Ex: Mercado Extra, Freelancer...")
 
@@ -275,7 +290,7 @@ def modal_nova_transacao():
                 "categoria": categoria,
                 "descricao": descricao.strip(),
                 "valor": float(valor),
-                "parcelas": parcelas.strip() or "1",
+                "parcelas": parcelas,
                 "data": data.isoformat(),
                 "fonte": fonte,
                 "status": status,
@@ -436,19 +451,6 @@ with st.sidebar:
     )
 
     busca = st.text_input("Buscar descrição", placeholder="Ex: Felipe, Cartão...")
-
-    st.divider()
-    if st.button("🔄 Gerar Recorrências", help="Preenche meses faltantes para D. Fixa e Parcelado"):
-        with st.spinner("Gerando recorrências..."):
-            try:
-                qtd = gerar_recorrencias_retroativas()
-                if qtd:
-                    st.success(f"{qtd} recorrências geradas.")
-                    st.rerun()
-                else:
-                    st.info("Nenhuma recorrência nova a gerar.")
-            except Exception as e:
-                st.error(f"Erro: {e}")
 
 resp_filtro = None if responsavel == "Todos" else responsavel
 mes_filtro = None if mes_sel == "Todos" else mes_sel
