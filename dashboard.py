@@ -180,6 +180,20 @@ div[data-testid="stAlert"] {
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 header[data-testid="stHeader"] { background: rgba(15,17,23,0.95) !important; backdrop-filter: blur(16px); }
+
+/* ── RESPONSIVO: ocultar seções no mobile ────────────────────── */
+@media (max-width: 768px) {
+    [data-testid="stElementContainer"]:has(#compromisos-start) ~ *:not(
+        [data-testid="stElementContainer"]:has(#compromisos-end) ~ *
+    ):not([data-testid="stElementContainer"]:has(#compromisos-end)) {
+        display: none !important;
+    }
+    [data-testid="stElementContainer"]:has(#calendario-start) ~ *:not(
+        [data-testid="stElementContainer"]:has(#calendario-end) ~ *
+    ):not([data-testid="stElementContainer"]:has(#calendario-end)) {
+        display: none !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -561,6 +575,9 @@ if busca:
     proximas  = [t for t in proximas  if _busca in t.get("descricao", "").lower()]
 
 total_atrasado = sum(float(t["valor"]) for t in atrasadas) if atrasadas else 0
+
+st.markdown('<span id="compromisos-start" style="display:none"></span>', unsafe_allow_html=True)
+
 if atrasadas:
     cor_barra = "#ef4444"
     texto_barra = f"⚠️ {formatar_moeda(total_atrasado).replace('$', chr(92) + '$')} em atraso"
@@ -611,6 +628,7 @@ with col_prox:
         st.info("Sem compromissos agendados.")
 
 st.divider()
+st.markdown('<span id="compromisos-end" style="display:none"></span>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Gráficos de barras — categorias
@@ -764,6 +782,8 @@ if mes_sel != "Todos":
 
     dia_sel = st.session_state.cal_dia_sel
 
+    st.markdown('<span id="calendario-start" style="display:none"></span>', unsafe_allow_html=True)
+
     # Cabeçalho
     col_titulo_cal, col_clear = st.columns([5, 2])
     with col_titulo_cal:
@@ -846,6 +866,7 @@ if mes_sel != "Todos":
                     st.rerun()
 
     st.divider()
+    st.markdown('<span id="calendario-end" style="display:none"></span>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Tabela com edição e exclusão
