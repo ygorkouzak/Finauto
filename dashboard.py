@@ -3,6 +3,7 @@ from datetime import datetime
 import altair as alt
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from db import (
     listar_transacoes,
     listar_evolucao_mensal,
@@ -143,35 +144,38 @@ div[data-testid="stAlert"] {
 
 /* ── CALENDÁRIO ──────────────────────────────────────────────── */
 [data-testid="stColumns"]:has(> [data-testid="stColumn"]:nth-child(7)) .stButton > button {
-    min-height: 68px !important;
+    min-height: 88px !important;
     white-space: pre-line !important;
     text-align: left !important;
     align-items: flex-start !important;
     justify-content: flex-start !important;
-    padding: 8px 10px !important;
+    padding: 10px 12px !important;
     font-size: 11px !important;
-    line-height: 1.55 !important;
-    border-radius: 9px !important;
-    transition: background 0.15s, border-color 0.15s !important;
+    line-height: 1.6 !important;
+    border-radius: 12px !important;
+    transition: all 0.18s cubic-bezier(.4,0,.2,1) !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    background: rgba(30,32,48,0.8) !important;
 }
 /* Dia selecionado */
 [data-testid="stColumns"]:has(> [data-testid="stColumn"]:nth-child(7)) .stButton > button[kind="primary"] {
     background: rgba(99,102,241,0.22) !important;
-    border: 1px solid #6366f1 !important;
+    border: 1.5px solid #6366f1 !important;
     color: #e8eaf0 !important;
-    box-shadow: 0 0 0 2px rgba(99,102,241,0.18) !important;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.12), 0 4px 16px rgba(99,102,241,0.25) !important;
 }
 /* Hover dias normais */
 [data-testid="stColumns"]:has(> [data-testid="stColumn"]:nth-child(7)) .stButton > button:not([kind="primary"]):hover {
-    background: rgba(255,255,255,0.05) !important;
-    border-color: rgba(255,255,255,0.18) !important;
+    border-color: rgba(255,255,255,0.22) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45) !important;
 }
 /* Responsivo: telas menores */
 @media (max-width: 768px) {
     [data-testid="stColumns"]:has(> [data-testid="stColumn"]:nth-child(7)) .stButton > button {
-        min-height: 52px !important;
+        min-height: 58px !important;
         font-size: 9.5px !important;
-        padding: 5px 6px !important;
+        padding: 6px 8px !important;
     }
 }
 
@@ -818,12 +822,63 @@ if mes_sel != "Todos":
     # Linha de cabeçalho dos dias da semana
     cols_header = st.columns(7)
     for i, nome in enumerate(DIAS_SEMANA):
-        cor_header = "#a5b4fc" if i >= 5 else "rgba(232,234,240,0.4)"
+        cor_header = "#a5b4fc" if i >= 5 else "rgba(232,234,240,0.55)"
+        bg_header  = "rgba(99,102,241,0.07)" if i >= 5 else "transparent"
         cols_header[i].markdown(
-            f"<div style='text-align:center;font-size:11px;font-weight:600;"
-            f"letter-spacing:0.06em;color:{cor_header};padding:4px 0'>{nome}</div>",
+            f"<div style='text-align:center;font-size:10px;font-weight:700;"
+            f"letter-spacing:0.1em;text-transform:uppercase;color:{cor_header};"
+            f"padding:7px 0;background:{bg_header};border-radius:7px;margin-bottom:3px'>{nome}</div>",
             unsafe_allow_html=True,
         )
+
+    # JS: reestiliza as células com cor por tipo financeiro e número do dia maior
+    components.html("""<script>
+(function(){
+  var doc=window.parent.document;
+  var t=null;
+  function run(){
+    doc.querySelectorAll('[data-testid="stColumns"]').forEach(function(grid){
+      if(grid.querySelectorAll(':scope>[data-testid="stColumn"]').length!==7)return;
+      grid.querySelectorAll('.stButton>button').forEach(function(btn){
+        var kind=btn.getAttribute('kind')||'';
+        var prev=btn.dataset.calKind;
+        if(prev===kind&&btn.querySelector('span[data-cs]'))return;
+        btn.dataset.calKind=kind;
+        var txt=(btn.innerText||'').trim();
+        var lines=txt.split('\\n').map(function(l){return l.trim();}).filter(Boolean);
+        if(!lines.length)return;
+        var d=lines[0],isToday=d.indexOf('\\uD83D\\uDD35')!==-1,num=d.replace('\\uD83D\\uDD35','').trim();
+        var inc=lines.some(function(l){return l.charAt(0)==='+';}),
+            exp=lines.some(function(l){return l.charAt(0)==='-';});
+        if(kind!=='primary'){
+          var bg='rgba(30,32,48,0.8)',bc='rgba(255,255,255,0.06)';
+          if(inc&&exp){bg='rgba(251,191,36,0.07)';bc='rgba(251,191,36,0.22)';}
+          else if(inc){bg='rgba(16,185,129,0.09)';bc='rgba(16,185,129,0.25)';}
+          else if(exp){bg='rgba(239,68,68,0.08)';bc='rgba(239,68,68,0.2)';}
+          btn.style.setProperty('background',bg,'important');
+          btn.style.setProperty('border-color',bc,'important');
+          btn.style.removeProperty('box-shadow');
+          if(isToday)btn.style.setProperty('box-shadow','0 0 0 2px rgba(99,102,241,0.55)','important');
+        }
+        var dot=isToday?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#818cf8;margin-left:5px;vertical-align:middle;margin-bottom:2px"></span>':'';
+        var h='<span data-cs="1" style="font-size:15px;font-weight:700;color:#e8eaf0;display:block;line-height:1;margin-bottom:6px">'+num+dot+'</span>';
+        for(var i=1;i<lines.length;i++){
+          var l=lines[i];
+          if(l.charAt(0)==='+')h+='<span data-cs="1" style="font-size:10.5px;color:#34d399;font-weight:600;display:block;line-height:1.5">'+l+'</span>';
+          else if(l.charAt(0)==='-')h+='<span data-cs="1" style="font-size:10.5px;color:#f87171;font-weight:600;display:block;line-height:1.5">'+l+'</span>';
+          else h+='<span data-cs="1" style="font-size:10px;color:#94a3b8">'+l+'</span>';
+        }
+        btn.innerHTML=h;
+      });
+    });
+  }
+  function debounce(){clearTimeout(t);t=setTimeout(run,80);}
+  setTimeout(run,300);
+  new MutationObserver(function(ms){
+    if(ms.some(function(m){return m.addedNodes.length>0||(m.type==='attributes'&&m.attributeName==='kind');}))debounce();
+  }).observe(doc.body,{childList:true,subtree:true,attributes:true,attributeFilter:['kind']});
+})();
+</script>""", height=0, scrolling=False)
 
     # Células dos dias
     for semana in semanas:
@@ -831,10 +886,10 @@ if mes_sel != "Todos":
         for i, dia in enumerate(semana):
             with cols[i]:
                 if dia == 0:
-                    # Célula vazia estilizada
                     st.markdown(
-                        "<div style='min-height:68px;border-radius:9px;"
-                        "background:rgba(255,255,255,0.02);margin:2px 0'></div>",
+                        "<div style='min-height:88px;border-radius:12px;"
+                        "background:rgba(255,255,255,0.012);border:1px dashed rgba(255,255,255,0.04);"
+                        "margin:1px 0'></div>",
                         unsafe_allow_html=True,
                     )
                     continue
