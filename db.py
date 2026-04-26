@@ -85,17 +85,27 @@ def listar_transacoes(ano=None, mes=None, responsavel=None):
     return resposta.data
 
 def listar_categorias(movimentacao=None):
-    """Retorna categorias únicas. Se movimentacao='Entrada'/'Saída', filtra por tipo."""
-    try:
-        query = supabase.table(TABELA).select("categoria, movimentacao")
-        if movimentacao:
-            query = query.eq("movimentacao", movimentacao)
-        resposta = query.execute()
-    except Exception as err:
-        raise RuntimeError(f"Falha ao ler categorias: {err}") from err
-
-    cats = {row["categoria"] for row in resposta.data if row.get("categoria")}
-    return sorted(cats)
+    """Retorna as listas fixas de categorias criadas pelo usuário."""
+    categorias_saida = [
+        "Alimentação", "Assinaturas", "Cartão Cred", "Compras On", 
+        "Empréstimo", "Impostos", "Investimento", "Lazer", "Moradia", 
+        "Pet", "Presente", "Roupas e Acessorios", "Saúde e beleza", 
+        "Serviços", "Tabacaria", "Transporte", "Viagem"
+    ]
+    
+    categorias_entrada = [
+        "Empréstimo", "Freelancer", "Investimentos", "JiuJitsu", 
+        "Salário", "Seg.Des"
+    ]
+    
+    if movimentacao == "Entrada":
+        return sorted(categorias_entrada)
+    elif movimentacao == "Saída":
+        return sorted(categorias_saida)
+    else:
+        # Se não especificar a movimentação, junta as duas listas (útil para filtros gerais)
+        todas_categorias = list(set(categorias_saida + categorias_entrada))
+        return sorted(todas_categorias)
 
 
 def buscar_historico(texto, limite=3):

@@ -34,7 +34,9 @@ CAMPOS_OBRIGATORIOS = {
     "valor", "parcelas", "data", "fonte", "status",
 }
 MOVIMENTACOES = {"Entrada", "Saída"}
-RESPONSAVEIS = {"Y", "M", "MY"}
+RESPONSAVEL = {"Y", "M", "MY"}
+CATEGORIA_SAIDA = {"Alimentação", "Assinaturas", "Cartão Cred", "Compras On", "Empréstimo", "Impostos", "Investimento", "Lazer", "Moradia", "Pet", "Presente", "Roupas e Acessorios", "Saúde e beleza", "Serviços", "Tabacaria", "Transporte", "Viagem"}
+CATEGORIA_ENTRADA = {"Empréstimo", "Freelancer", "Investimentos", "JiuJitsu", "Salário", "Seg.Des"}
 FONTES = {"Dinheiro", "Cartão Crédito"}
 TIPOS_SAIDA = {"P. Unico", "D. Fixa", "Parcelado"}
 TIPOS_ENTRADA = {"Receita Fixa", "Receita Variável"}
@@ -59,7 +61,7 @@ def _validar(dados):
     if mov not in MOVIMENTACOES:
         problemas.append(f"movimentacao inválida: {mov!r}")
 
-    if dados["responsavel"] not in RESPONSAVEIS:
+    if dados["responsavel"] not in RESPONSAVEL:
         problemas.append(f"responsavel inválido: {dados['responsavel']!r}")
 
     if dados["fonte"] not in FONTES:
