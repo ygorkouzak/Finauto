@@ -82,14 +82,24 @@ else:
 
     with col_g2:
         st.subheader("Evolução Mensal")
-        df_evolucao = listar_evolucao_mensal()
-        chart_evol = alt.Chart(df_evolucao).mark_line(point=True).encode(
-            x='mes_ano:T',
-            y='total:Q',
-            color='movimentacao:N',
-            tooltip=['mes_ano', 'total', 'movimentacao']
-        )
-        st.altair_chart(chart_evol, use_container_width=True)
+        df_evolucao = pd.DataFrame(listar_evolucao_mensal(ano))
+        if df_evolucao.empty:
+            st.info("Sem dados de evolução para o ano selecionado.")
+        else:
+            df_evolucao['data'] = pd.to_datetime(df_evolucao['data'])
+            df_evolucao['mes_ano'] = df_evolucao['data'].dt.to_period('M').dt.to_timestamp()
+            df_evolucao = (
+                df_evolucao.groupby(['mes_ano', 'movimentacao'], as_index=False)['valor']
+                .sum()
+                .rename(columns={'valor': 'total'})
+            )
+            chart_evol = alt.Chart(df_evolucao).mark_line(point=True).encode(
+                x='mes_ano:T',
+                y='total:Q',
+                color='movimentacao:N',
+                tooltip=['mes_ano', 'total', 'movimentacao']
+            )
+            st.altair_chart(chart_evol, use_container_width=True)
 
 # --- Seção: Adicionar Transação Manual ---
 st.divider()
