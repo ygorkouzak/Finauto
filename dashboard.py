@@ -76,7 +76,7 @@ ano = st.sidebar.selectbox(
     "Ano", list(range(ano_atual, ano_atual - 4, -1)), index=0
 )
 responsavel_sel = st.sidebar.selectbox("Responsável", ["Todos", "Y", "M", "MY"])
-resp_filter = None if responsavel_sel == "Todos" else responsavel_sel
+resp_filter = None if responsavel_sel in ("Todos", "MY") else responsavel_sel
 
 st.sidebar.divider()
 if st.sidebar.button("🔄 Atualizar dados", use_container_width=True):
