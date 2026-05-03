@@ -1065,7 +1065,73 @@ elif page == "🔍 Conferência":
         key="conf_editor",
     )
 
-    col_s, col_d, _ = st.columns([1, 1, 5])
+    # --- Exportar Excel ---
+    import io
+
+    def _gerar_excel(dataframe):
+        colunas_export = ["id", "data", "movimentacao", "responsavel", "tipo",
+                          "categoria", "descricao", "valor", "parcelas", "fonte", "status"]
+        df_exp = dataframe[[c for c in colunas_export if c in dataframe.columns]].copy()
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            df_exp.to_excel(writer, index=False, sheet_name="Transacoes")
+        return buf.getvalue()
+
+    col_exp, col_imp, col_s, col_d, _ = st.columns([1, 1, 1, 1, 3])
+
+    with col_exp:
+        nome_arquivo = f"finauto_{titulo_periodo.replace('/', '-')}.xlsx"
+        st.download_button(
+            "⬇️ Exportar Excel",
+            data=_gerar_excel(df_orig),
+            file_name=nome_arquivo,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
+    with col_imp:
+        arquivo = st.file_uploader("", type=["xlsx"], label_visibility="collapsed", key="import_xlsx")
+        if arquivo:
+            try:
+                df_import = pd.read_excel(arquivo, dtype=str)
+                df_import["valor"] = pd.to_numeric(df_import["valor"], errors="coerce")
+                df_import["id"] = pd.to_numeric(df_import["id"], errors="coerce").astype("Int64")
+                df_import = df_import.dropna(subset=["id"])
+
+                orig_idx = df_orig.set_index("id")
+                campos_import = ["movimentacao", "responsavel", "tipo", "categoria",
+                                 "descricao", "valor", "fonte", "status", "parcelas", "data"]
+                atualizados = 0
+                erros_imp = 0
+
+                for _, row in df_import.iterrows():
+                    id_trans = int(row["id"])
+                    if id_trans not in orig_idx.index:
+                        continue
+                    row_orig = orig_idx.loc[id_trans]
+                    mudancas = {}
+                    for campo in campos_import:
+                        if campo not in row:
+                            continue
+                        v_edit = str(row[campo])[:10] if campo == "data" else row[campo]
+                        v_orig = str(row_orig.get(campo, ""))[:10] if campo == "data" else row_orig.get(campo)
+                        if str(v_edit) != str(v_orig):
+                            mudancas[campo] = float(v_edit) if campo == "valor" else v_edit
+                    if mudancas:
+                        try:
+                            atualizar_transacao(id_trans, mudancas)
+                            atualizados += 1
+                        except Exception as e:
+                            erros_imp += 1
+                            st.error(f"Erro #{id_trans}: {e}")
+
+                if atualizados:
+                    st.success(f"✅ {atualizados} linha(s) importada(s).")
+                    st.rerun()
+                elif erros_imp == 0:
+                    st.info("Nenhuma alteração detectada no arquivo.")
+            except Exception as e:
+                st.error(f"Erro ao ler arquivo: {e}")
 
     with col_s:
         if st.button("💾 Salvar Alterações", use_container_width=True, type="primary"):
