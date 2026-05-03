@@ -223,9 +223,6 @@ def kpi_card(label, valor, cor="#e8eaf0"):
     </div>"""
 
 
-st.title("💰 FinAuto — Dashboard")
-st.caption("Seu controle financeiro automatizado via WhatsApp.")
-
 # ---------------------------------------------------------------------------
 # Modal de nova transação
 # ---------------------------------------------------------------------------
@@ -391,20 +388,21 @@ def modal_editar_transacao(transacao):
             st.rerun()
 
 
-# Botão de abrir o modal
-if st.button("➕ Nova transação", type="primary"):
-    modal_nova_transacao()
-
-st.divider()
-
 hoje = datetime.now()
 MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
          "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
 # ---------------------------------------------------------------------------
-# Filtros (sidebar)
+# Sidebar — navegação + filtros
 # ---------------------------------------------------------------------------
 with st.sidebar:
+    page = st.radio(
+        "Navegação",
+        ["📊 Dashboard", "🔍 Conferência"],
+        label_visibility="collapsed",
+    )
+    st.divider()
+
     st.header("Filtros")
     ano = st.selectbox("Ano", range(hoje.year - 2, hoje.year + 2), index=2)
 
@@ -458,11 +456,15 @@ mes_filtro = None if mes_sel == "Todos" else mes_sel
 titulo_periodo = f"{ano}" if mes_sel == "Todos" else f"{MESES[mes_sel-1]}/{ano}"
 
 # ---------------------------------------------------------------------------
-# Busca e filtra dados
+# Carrega dados (compartilhado entre páginas)
 # ---------------------------------------------------------------------------
 dados = listar_transacoes(ano=ano, mes=mes_filtro, responsavel=resp_filtro)
 
 if not dados:
+    if page == "📊 Dashboard":
+        st.title("💰 FinAuto — Dashboard")
+    else:
+        st.title("🔍 Conferência e Validação")
     st.info(f"Nenhuma transação em {titulo_periodo}.")
     st.stop()
 
@@ -470,6 +472,7 @@ df = pd.DataFrame(dados)
 df["valor"] = pd.to_numeric(df["valor"])
 df["data"] = pd.to_datetime(df["data"]).dt.date
 
+# Aplica filtros de status, movimentação, categorias e busca
 if status_sel:
     df = df[df["status"].isin(status_sel)]
 if movimentacao_sel:
@@ -482,6 +485,10 @@ if busca:
     df = df[df["descricao"].str.contains(busca, case=False, na=False)]
 
 if df.empty:
+    if page == "📊 Dashboard":
+        st.title("💰 FinAuto — Dashboard")
+    else:
+        st.title("🔍 Conferência e Validação")
     st.warning("Nenhuma transação após os filtros.")
     st.stop()
 
@@ -489,493 +496,624 @@ entradas = df.loc[df["movimentacao"] == "Entrada", "valor"].sum()
 saidas = df.loc[df["movimentacao"] == "Saída", "valor"].sum()
 saldo = entradas - saidas
 
-# ---------------------------------------------------------------------------
-# KPIs principais
-# ---------------------------------------------------------------------------
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.markdown(kpi_card("Entradas", formatar_moeda(entradas), "#22c55e"), unsafe_allow_html=True)
-with col2:
-    st.markdown(kpi_card("Saídas", formatar_moeda(saidas), "#ef4444"), unsafe_allow_html=True)
-with col3:
-    cor_saldo = "#22c55e" if saldo >= 0 else "#ef4444"
-    st.markdown(kpi_card("Saldo", formatar_moeda(saldo), cor_saldo), unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# PÁGINA: DASHBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+if page == "📊 Dashboard":
+    st.title("💰 FinAuto — Dashboard")
+    st.caption("Seu controle financeiro automatizado via WhatsApp.")
 
-st.divider()
-
-# ---------------------------------------------------------------------------
-# KPIs de planejamento
-# ---------------------------------------------------------------------------
-entradas_pagas = df[(df["movimentacao"] == "Entrada") & (df["status"] == "Recebido")]["valor"].sum()
-saidas_pagas = df[(df["movimentacao"] == "Saída") & (df["status"] == "Pago")]["valor"].sum()
-saldo_real = entradas_pagas - saidas_pagas
-
-saidas_fixas = df[
-    (df["movimentacao"] == "Saída") & (df["tipo"] == "D. Fixa")
-]["valor"].sum()
-
-taxa_poupanca = (saldo_real / entradas_pagas * 100) if entradas_pagas > 0 else 0
-compromet_fixa = (saidas_fixas / entradas_pagas * 100) if entradas_pagas > 0 else 0
-
-col_a, col_b, col_c = st.columns(3)
-with col_a:
-    cor_sr = "#22c55e" if saldo_real >= 0 else "#ef4444"
-    st.markdown(kpi_card("Saldo realizado", formatar_moeda(saldo_real), cor_sr), unsafe_allow_html=True)
-with col_b:
-    cor_tp = "#22c55e" if taxa_poupanca >= 20 else ("#f59e0b" if taxa_poupanca >= 10 else "#ef4444")
-    st.markdown(kpi_card("Taxa de poupança", f"{taxa_poupanca:.1f}%", cor_tp), unsafe_allow_html=True)
-with col_c:
-    cor_cf = "#ef4444" if compromet_fixa >= 50 else ("#f59e0b" if compromet_fixa >= 35 else "#22c55e")
-    st.markdown(kpi_card("Comprometimento D. Fixa", f"{compromet_fixa:.1f}%", cor_cf), unsafe_allow_html=True)
-
-st.divider()
-
-# ---------------------------------------------------------------------------
-# Alertas e próximos compromissos
-# ---------------------------------------------------------------------------
-def _render_lista_com_quitar(titulo, transacoes, chave_prefix):
-    st.subheader(titulo)
-    if not transacoes:
-        return
-
-    df_lista = pd.DataFrame(transacoes)
-    df_lista["valor"] = pd.to_numeric(df_lista["valor"])
-    df_lista["data"] = pd.to_datetime(df_lista["data"]).dt.strftime("%d/%m/%Y")
-
-    for _, linha in df_lista.iterrows():
-        cor = "🔴" if linha["movimentacao"] == "Saída" else "🟢"
-        label_btn = "✅ Pago" if linha["movimentacao"] == "Saída" else "✅ Recebido"
-
-        col_info, col_btn = st.columns([4, 1])
-        with col_info:
-            st.markdown(
-                f"{cor} **{linha['data']}** — {linha['descricao']} "
-                f"({linha['categoria']}) — "
-                f"{formatar_moeda(linha['valor']).replace('$', chr(92) + '$')} "
-                f"· {linha['responsavel']}"
-            )
-        with col_btn:
-            if st.button(label_btn, key=f"{chave_prefix}_{linha['id']}", width="stretch"):
-                try:
-                    marcar_como_quitado(int(linha["id"]), linha["movimentacao"])
-                    st.rerun()
-                except RuntimeError as err:
-                    st.error(f"Erro: {err}")
-
-
-atrasadas = listar_atrasadas(responsavel=resp_filtro)
-proximas = listar_proximos(dias=30, responsavel=resp_filtro)
-
-if movimentacao_sel:
-    atrasadas = [t for t in atrasadas if t["movimentacao"] in movimentacao_sel]
-    proximas  = [t for t in proximas  if t["movimentacao"] in movimentacao_sel]
-if status_sel:
-    proximas = [t for t in proximas if t["status"] in status_sel]
-if busca:
-    _busca = busca.lower()
-    atrasadas = [t for t in atrasadas if _busca in t.get("descricao", "").lower()]
-    proximas  = [t for t in proximas  if _busca in t.get("descricao", "").lower()]
-
-total_atrasado = sum(float(t["valor"]) for t in atrasadas) if atrasadas else 0
-
-st.markdown('<span id="compromisos-start" style="display:none"></span>', unsafe_allow_html=True)
-
-if atrasadas:
-    cor_barra = "#ef4444"
-    texto_barra = f"⚠️ {formatar_moeda(total_atrasado).replace('$', chr(92) + '$')} em atraso"
-else:
-    cor_barra = "#22c55e"
-    texto_barra = "✓ Nada atrasado."
-
-st.markdown(f"""
-<div style="background:#1a1b26;border:1px solid rgba(255,255,255,0.07);
-            border-radius:10px;overflow:hidden;height:44px;
-            display:flex;align-items:center;margin-bottom:16px">
-    <div style="height:100%;width:100%;background:{cor_barra};
-                display:flex;align-items:center;padding-left:18px;
-                font-size:13px;font-weight:600;color:#fff">
-        {texto_barra}
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-col_atr, col_prox = st.columns(2)
-
-with col_atr:
-    if atrasadas:
-        df_atr = pd.DataFrame(atrasadas)
-        df_atr["valor"] = pd.to_numeric(df_atr["valor"])
-        total_atr = df_atr["valor"].sum()
-        st.metric("🔴 Total atrasado", formatar_moeda(total_atr))
-        _render_lista_com_quitar("Atrasadas", atrasadas, "atr")
-    else:
-        st.subheader("🔴 Atrasadas")
-        st.success("Nada atrasado.")
-
-with col_prox:
-    if proximas:
-        df_prox = pd.DataFrame(proximas)
-        df_prox["valor"] = pd.to_numeric(df_prox["valor"])
-        prev_entrada = df_prox[df_prox["movimentacao"] == "Entrada"]["valor"].sum()
-        prev_saida = df_prox[df_prox["movimentacao"] == "Saída"]["valor"].sum()
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown(kpi_card("📥 A receber", formatar_moeda(prev_entrada), "#3b82f6"), unsafe_allow_html=True)
-        with c2:
-            st.markdown(kpi_card("📤 A pagar", formatar_moeda(prev_saida), "#f59e0b"), unsafe_allow_html=True)
-        st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
-        _render_lista_com_quitar("Próximos 30 dias", proximas, "prox")
-    else:
-        st.subheader("📅 Próximos 30 dias")
-        st.info("Sem compromissos agendados.")
-
-st.divider()
-st.markdown('<span id="compromisos-end" style="display:none"></span>', unsafe_allow_html=True)
-
-# ---------------------------------------------------------------------------
-# Gráficos de barras — categorias
-# ---------------------------------------------------------------------------
-def _grafico_barras(df_valor, cor):
-    df_valor = df_valor.copy()
-    df_valor["valor_label"] = df_valor["valor"].apply(lambda v: f"R$ {v:,.0f}")
-
-    base = alt.Chart(df_valor).encode(
-        y=alt.Y("categoria:N", sort="-x", title=""),
-    )
-
-    barras = base.mark_bar(color=cor, cornerRadiusTopRight=4, cornerRadiusBottomRight=4).encode(
-        x=alt.X("valor:Q", title="R$",
-                axis=alt.Axis(format=",.0f", gridColor="rgba(255,255,255,0.04)",
-                              labelColor="rgba(232,234,240,0.5)", tickColor="transparent")),
-        tooltip=[
-            alt.Tooltip("categoria:N", title="Categoria"),
-            alt.Tooltip("valor:Q", title="Valor", format=",.2f"),
-        ],
-    )
-
-    rotulos = base.mark_text(
-        align="left", baseline="middle", dx=6,
-        color="rgba(232,234,240,0.75)", fontSize=11, fontWeight=500,
-    ).encode(
-        x=alt.X("valor:Q"),
-        text=alt.Text("valor_label:N"),
-    )
-
-    return (
-        (barras + rotulos)
-        .properties(height=alt.Step(30))
-        .configure_view(strokeOpacity=0, fill="#1a1b26")
-        .configure_axis(labelColor="rgba(232,234,240,0.5)", titleColor="rgba(232,234,240,0.4)",
-                        gridColor="rgba(255,255,255,0.04)", domainColor="rgba(255,255,255,0.07)")
-    )
-
-col_esq, col_dir = st.columns(2)
-
-with col_esq:
-    st.subheader("Saídas por categoria")
-    df_saidas = df[df["movimentacao"] == "Saída"]
-    if df_saidas.empty:
-        st.caption("Sem saídas neste período.")
-    else:
-        agrupado = df_saidas.groupby("categoria", as_index=False)["valor"].sum()
-        st.altair_chart(_grafico_barras(agrupado, "#ef4444"), use_container_width=True)
-
-with col_dir:
-    st.subheader("Entradas por categoria")
-    df_entradas = df[df["movimentacao"] == "Entrada"]
-    if df_entradas.empty:
-        st.caption("Sem entradas neste período.")
-    else:
-        agrupado = df_entradas.groupby("categoria", as_index=False)["valor"].sum()
-        st.altair_chart(_grafico_barras(agrupado, "#22c55e"), use_container_width=True)
-
-st.divider()
-
-# ---------------------------------------------------------------------------
-# Evolução mensal
-# ---------------------------------------------------------------------------
-st.subheader(f"Evolução mensal de {ano}")
-dados_ano = listar_evolucao_mensal(ano=ano, responsavel=resp_filtro)
-
-if not dados_ano:
-    st.caption("Sem dados no ano.")
-else:
-    df_ano = pd.DataFrame(dados_ano)
-    df_ano["valor"] = pd.to_numeric(df_ano["valor"])
-    df_ano["mes_num"] = pd.to_datetime(df_ano["data"]).dt.month
-
-    if movimentacao_sel:
-        df_ano = df_ano[df_ano["movimentacao"].isin(movimentacao_sel)]
-    if status_sel and "status" in df_ano.columns:
-        df_ano = df_ano[df_ano["status"].isin(status_sel)]
-
-    pivot = (
-        df_ano.groupby(["mes_num", "movimentacao"])["valor"]
-        .sum()
-        .unstack(fill_value=0)
-        .reindex(range(1, 13), fill_value=0)
-    )
-
-    entradas_mes = pivot.get("Entrada", pd.Series(0, index=pivot.index))
-    saidas_mes = pivot.get("Saída", pd.Series(0, index=pivot.index))
-
-    longo = pd.DataFrame({
-        "mes_num": list(range(1, 13)) * 3,
-        "Serie": ["Entradas"] * 12 + ["Saídas"] * 12 + ["Saldo"] * 12,
-        "valor": list(entradas_mes) + list(saidas_mes) + list(entradas_mes - saidas_mes),
-    })
-    longo["mes"] = longo["mes_num"].apply(lambda m: MESES[m - 1])
-    longo["valor_label"] = longo["valor"].apply(lambda v: f"R$ {v:,.0f}")
-
-    base_linha = alt.Chart(longo)
-    cor_scale = alt.Scale(
-        domain=["Entradas", "Saídas", "Saldo"],
-        range=["#22c55e", "#ef4444", "#3b82f6"],
-    )
-    encode_base = dict(
-        x=alt.X("mes:N", sort=MESES, title=""),
-        color=alt.Color("Serie:N", scale=cor_scale, title=""),
-    )
-
-    linhas = base_linha.mark_line(point=True).encode(
-        **encode_base,
-        y=alt.Y("valor:Q", title="R$", axis=alt.Axis(format=",.0f")),
-        tooltip=[
-            alt.Tooltip("mes:N", title="Mês"),
-            alt.Tooltip("Serie:N", title="Série"),
-            alt.Tooltip("valor:Q", title="Valor", format=",.2f"),
-        ],
-    )
-
-    rotulos_linha = base_linha.mark_text(dy=-10, fontSize=11).encode(
-        **encode_base,
-        y=alt.Y("valor:Q"),
-        text=alt.Text("valor_label:N"),
-    )
-
-    grafico = (
-        (linhas + rotulos_linha)
-        .properties(height=350)
-        .configure_view(strokeOpacity=0, fill="#1a1b26")
-        .configure_axis(
-            labelColor="rgba(232,234,240,0.5)",
-            titleColor="rgba(232,234,240,0.4)",
-            gridColor="rgba(255,255,255,0.04)",
-            domainColor="rgba(255,255,255,0.07)",
-        )
-        .configure_legend(
-            labelColor="rgba(232,234,240,0.7)",
-            titleColor="rgba(232,234,240,0.4)",
-        )
-    )
-    st.altair_chart(grafico, use_container_width=True)
-
-st.divider()
-
-# ---------------------------------------------------------------------------
-# Calendário interativo (só quando um mês está selecionado)
-# ---------------------------------------------------------------------------
-if mes_sel != "Todos":
-    # Reseta seleção ao trocar de mês/ano
-    chave_periodo = (ano, mes_sel)
-    if st.session_state.cal_mes_prev != chave_periodo:
-        st.session_state.cal_dia_sel = None
-        st.session_state.cal_mes_prev = chave_periodo
-
-    dia_sel = st.session_state.cal_dia_sel
-
-    st.markdown('<span id="calendario-start" style="display:none"></span>', unsafe_allow_html=True)
-
-    # Cabeçalho
-    col_titulo_cal, col_clear = st.columns([5, 2])
-    with col_titulo_cal:
-        st.subheader(f"Calendário de {titulo_periodo}")
-    with col_clear:
-        if dia_sel:
-            st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
-            if st.button(
-                f"✕ {dia_sel:02d}/{MESES[mes_sel-1]} — limpar filtro",
-                key="cal_clear",
-                use_container_width=True,
-            ):
-                st.session_state.cal_dia_sel = None
-                st.rerun()
-
-    # Agrupamentos por dia
-    por_dia = (
-        df.groupby([df["data"].apply(lambda d: d.day), "movimentacao"])["valor"]
-        .sum()
-        .unstack(fill_value=0)
-    )
-    entradas_dia = por_dia.get("Entrada", {}).to_dict() if "Entrada" in por_dia.columns else {}
-    saidas_dia   = por_dia.get("Saída",   {}).to_dict() if "Saída"   in por_dia.columns else {}
-
-    cal_obj   = calendar.Calendar(firstweekday=0)
-    semanas   = cal_obj.monthdayscalendar(ano, mes_sel)
-    DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-    hoje_dia  = hoje.day if (mes_sel == hoje.month and ano == hoje.year) else -1
-
-    # Linha de cabeçalho dos dias da semana
-    cols_header = st.columns(7)
-    for i, nome in enumerate(DIAS_SEMANA):
-        cor_header = "#a5b4fc" if i >= 5 else "rgba(232,234,240,0.4)"
-        cols_header[i].markdown(
-            f"<div style='text-align:center;font-size:11px;font-weight:600;"
-            f"letter-spacing:0.06em;color:{cor_header};padding:4px 0'>{nome}</div>",
-            unsafe_allow_html=True,
-        )
-
-    # Células dos dias
-    for semana in semanas:
-        cols = st.columns(7)
-        for i, dia in enumerate(semana):
-            with cols[i]:
-                if dia == 0:
-                    # Célula vazia estilizada
-                    st.markdown(
-                        "<div style='min-height:68px;border-radius:9px;"
-                        "background:rgba(255,255,255,0.02);margin:2px 0'></div>",
-                        unsafe_allow_html=True,
-                    )
-                    continue
-
-                entrada = entradas_dia.get(dia, 0)
-                saida   = saidas_dia.get(dia, 0)
-                e_hoje  = (dia == hoje_dia)
-
-                # Linha 1: número do dia + marcador de hoje
-                marcador_hoje = " 🔵" if e_hoje else ""
-                label_partes  = [f"{dia}{marcador_hoje}"]
-
-                if entrada:
-                    v = formatar_moeda(entrada).replace("R$\u00a0", "").replace("R$ ", "")
-                    label_partes.append(f"+R${v}")
-                if saida:
-                    v = formatar_moeda(saida).replace("R$\u00a0", "").replace("R$ ", "")
-                    label_partes.append(f"-R${v}")
-
-                label      = "\n".join(label_partes)
-                selecionado = (dia_sel == dia)
-
-                if st.button(
-                    label,
-                    key=f"cal_{ano}_{mes_sel}_{dia}",
-                    type="primary" if selecionado else "secondary",
-                    use_container_width=True,
-                ):
-                    # Toggle: clicar no mesmo dia desfaz a seleção
-                    st.session_state.cal_dia_sel = None if selecionado else dia
-                    st.rerun()
+    if st.button("➕ Nova transação", type="primary"):
+        modal_nova_transacao()
 
     st.divider()
-    st.markdown('<span id="calendario-end" style="display:none"></span>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------------
-# Tabela com edição e exclusão
-# ---------------------------------------------------------------------------
+    # KPIs principais
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(kpi_card("Entradas", formatar_moeda(entradas), "#22c55e"), unsafe_allow_html=True)
+    with col2:
+        st.markdown(kpi_card("Saídas", formatar_moeda(saidas), "#ef4444"), unsafe_allow_html=True)
+    with col3:
+        cor_saldo = "#22c55e" if saldo >= 0 else "#ef4444"
+        st.markdown(kpi_card("Saldo", formatar_moeda(saldo), cor_saldo), unsafe_allow_html=True)
 
-# Aplica filtro de dia do calendário (se houver)
-_dia_ativo = st.session_state.get("cal_dia_sel") if mes_sel != "Todos" else None
-df_tabela = df[df["data"].apply(lambda d: d.day) == _dia_ativo].copy() if _dia_ativo else df.copy()
+    st.divider()
 
-# Subtítulo da tabela: mostra dia selecionado, se houver
-if _dia_ativo:
-    subtitulo_tab = f"{_dia_ativo:02d}/{MESES[mes_sel-1]}/{ano} — clique no dia novamente para limpar"
-    badge = (f"<span style='background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);"
-             f"border-radius:100px;padding:2px 10px;font-size:10px;color:#a5b4fc;"
-             f"margin-left:8px'>{_dia_ativo:02d}/{MESES[mes_sel-1]}</span>")
-else:
-    subtitulo_tab = titulo_periodo
-    badge = ""
+    # KPIs de planejamento
+    entradas_pagas = df[(df["movimentacao"] == "Entrada") & (df["status"] == "Recebido")]["valor"].sum()
+    saidas_pagas = df[(df["movimentacao"] == "Saída") & (df["status"] == "Pago")]["valor"].sum()
+    saldo_real = entradas_pagas - saidas_pagas
 
-st.markdown(f"""
-<div style="background:#1a1b26;border:1px solid rgba(255,255,255,0.07);
-            border-radius:10px 10px 0 0;padding:14px 18px 12px;
-            border-bottom:1px solid rgba(255,255,255,0.07)">
-    <div style="font-size:13px;font-weight:600;color:#e8eaf0">Transações{badge}</div>
-    <div style="font-size:11px;color:rgba(232,234,240,0.35);margin-top:2px">{subtitulo_tab}</div>
-</div>
-""", unsafe_allow_html=True)
+    saidas_fixas = df[
+        (df["movimentacao"] == "Saída") & (df["tipo"] == "D. Fixa")
+    ]["valor"].sum()
 
-colunas_visiveis = ["id", "data", "movimentacao", "categoria", "descricao",
-                    "valor", "responsavel", "telefone", "fonte", "parcelas", "status"]
+    taxa_poupanca = (saldo_real / entradas_pagas * 100) if entradas_pagas > 0 else 0
+    compromet_fixa = (saidas_fixas / entradas_pagas * 100) if entradas_pagas > 0 else 0
 
-# `telefone` pode não existir em linhas antigas — garante a coluna no df
-if "telefone" not in df_tabela.columns:
-    df_tabela = df_tabela.copy()
-    df_tabela["telefone"] = None
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        cor_sr = "#22c55e" if saldo_real >= 0 else "#ef4444"
+        st.markdown(kpi_card("Saldo realizado", formatar_moeda(saldo_real), cor_sr), unsafe_allow_html=True)
+    with col_b:
+        cor_tp = "#22c55e" if taxa_poupanca >= 20 else ("#f59e0b" if taxa_poupanca >= 10 else "#ef4444")
+        st.markdown(kpi_card("Taxa de poupança", f"{taxa_poupanca:.1f}%", cor_tp), unsafe_allow_html=True)
+    with col_c:
+        cor_cf = "#ef4444" if compromet_fixa >= 50 else ("#f59e0b" if compromet_fixa >= 35 else "#22c55e")
+        st.markdown(kpi_card("Comprometimento D. Fixa", f"{compromet_fixa:.1f}%", cor_cf), unsafe_allow_html=True)
 
-df_editavel = df_tabela[colunas_visiveis].copy()
-df_editavel["data"] = df_editavel["data"].apply(lambda d: d.strftime("%d/%m/%Y"))
-df_editavel["excluir"] = False
+    st.divider()
 
-_cats_tabela = sorted(set(_get_categorias("Saída") + _get_categorias("Entrada")))
+    # Alertas e próximos compromissos
+    def _render_lista_com_quitar(titulo, transacoes, chave_prefix):
+        st.subheader(titulo)
+        if not transacoes:
+            return
 
-editado = st.data_editor(
-    df_editavel,
-    width="stretch",
-    hide_index=True,
-    disabled=["id", "data", "telefone"],
-    column_config={
-        "movimentacao": st.column_config.SelectboxColumn(
-            options=["Entrada", "Saída"], required=True),
-        "responsavel": st.column_config.SelectboxColumn(
-            options=["Y", "M", "MY"], required=True),
-        "fonte": st.column_config.SelectboxColumn(
-            options=["Dinheiro", "Cartão Crédito"], required=True),
-        "status": st.column_config.SelectboxColumn(
-            options=["Pago", "Recebido", "A pagar", "A receber", "Atrasado"],
-            required=True),
-        "categoria": st.column_config.SelectboxColumn(
-            options=_cats_tabela, required=True) if _cats_tabela else None,
-        "valor": st.column_config.NumberColumn(format="R$ %.2f", min_value=0.01),
-        "telefone": st.column_config.TextColumn("Telefone", disabled=True),
-        "excluir": st.column_config.CheckboxColumn("🗑️"),
-    },
-    key="tabela_edicao",
-)
+        df_lista = pd.DataFrame(transacoes)
+        df_lista["valor"] = pd.to_numeric(df_lista["valor"])
+        df_lista["data"] = pd.to_datetime(df_lista["data"]).dt.strftime("%d/%m/%Y")
 
-col_s, col_d = st.columns(2)
+        for _, linha in df_lista.iterrows():
+            cor = "🔴" if linha["movimentacao"] == "Saída" else "🟢"
+            label_btn = "✅ Pago" if linha["movimentacao"] == "Saída" else "✅ Recebido"
 
-with col_s:
-    if st.button("💾 Salvar alterações", type="primary", use_container_width=True):
-        alteracoes = 0
-        original = df_tabela[colunas_visiveis].set_index("id")
-        novo = editado.set_index("id")
+            col_info, col_btn = st.columns([4, 1])
+            with col_info:
+                st.markdown(
+                    f"{cor} **{linha['data']}** — {linha['descricao']} "
+                    f"({linha['categoria']}) — "
+                    f"{formatar_moeda(linha['valor']).replace('$', chr(92) + '$')} "
+                    f"· {linha['responsavel']}"
+                )
+            with col_btn:
+                if st.button(label_btn, key=f"{chave_prefix}_{linha['id']}", width="stretch"):
+                    try:
+                        marcar_como_quitado(int(linha["id"]), linha["movimentacao"])
+                        st.rerun()
+                    except RuntimeError as err:
+                        st.error(f"Erro: {err}")
 
-        for id_trans in novo.index:
-            linha_original = original.loc[id_trans].to_dict()
-            linha_nova = novo.loc[id_trans].drop("excluir").to_dict()
+    atrasadas = listar_atrasadas(responsavel=resp_filtro)
+    proximas = listar_proximos(dias=30, responsavel=resp_filtro)
 
-            # "data" é desabilitado na tabela — exclui para evitar falso diff por tipo
-            diff = {k: v for k, v in linha_nova.items()
-                    if k != "data" and str(linha_original.get(k, "")) != str(v)}
+    if movimentacao_sel:
+        atrasadas = [t for t in atrasadas if t["movimentacao"] in movimentacao_sel]
+        proximas  = [t for t in proximas  if t["movimentacao"] in movimentacao_sel]
+    if status_sel:
+        proximas = [t for t in proximas if t["status"] in status_sel]
+    if busca:
+        _busca = busca.lower()
+        atrasadas = [t for t in atrasadas if _busca in t.get("descricao", "").lower()]
+        proximas  = [t for t in proximas  if _busca in t.get("descricao", "").lower()]
 
-            if diff:
-                if "valor" in diff:
-                    diff["valor"] = float(diff["valor"])
-                try:
-                    atualizar_transacao(int(id_trans), diff)
-                    alteracoes += 1
-                except RuntimeError as err:
-                    st.error(f"Erro ao atualizar #{id_trans}: {err}")
+    total_atrasado = sum(float(t["valor"]) for t in atrasadas) if atrasadas else 0
 
-        if alteracoes:
-            st.success(f"{alteracoes} transação(ões) atualizada(s).")
-            st.rerun()
+    st.markdown('<span id="compromisos-start" style="display:none"></span>', unsafe_allow_html=True)
+
+    if atrasadas:
+        cor_barra = "#ef4444"
+        texto_barra = f"⚠️ {formatar_moeda(total_atrasado).replace('$', chr(92) + '$')} em atraso"
+    else:
+        cor_barra = "#22c55e"
+        texto_barra = "✓ Nada atrasado."
+
+    st.markdown(f"""
+    <div style="background:#1a1b26;border:1px solid rgba(255,255,255,0.07);
+                border-radius:10px;overflow:hidden;height:44px;
+                display:flex;align-items:center;margin-bottom:16px">
+        <div style="height:100%;width:100%;background:{cor_barra};
+                    display:flex;align-items:center;padding-left:18px;
+                    font-size:13px;font-weight:600;color:#fff">
+            {texto_barra}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_atr, col_prox = st.columns(2)
+
+    with col_atr:
+        if atrasadas:
+            df_atr = pd.DataFrame(atrasadas)
+            df_atr["valor"] = pd.to_numeric(df_atr["valor"])
+            total_atr = df_atr["valor"].sum()
+            st.metric("🔴 Total atrasado", formatar_moeda(total_atr))
+            _render_lista_com_quitar("Atrasadas", atrasadas, "atr")
         else:
-            st.info("Nenhuma alteração detectada.")
+            st.subheader("🔴 Atrasadas")
+            st.success("Nada atrasado.")
 
-with col_d:
-    if st.button("🗑️ Excluir marcadas", use_container_width=True):
-        para_excluir = editado[editado["excluir"]]["id"].tolist()
-        if not para_excluir:
-            st.info("Nenhuma transação marcada para exclusão.")
+    with col_prox:
+        if proximas:
+            df_prox = pd.DataFrame(proximas)
+            df_prox["valor"] = pd.to_numeric(df_prox["valor"])
+            prev_entrada = df_prox[df_prox["movimentacao"] == "Entrada"]["valor"].sum()
+            prev_saida = df_prox[df_prox["movimentacao"] == "Saída"]["valor"].sum()
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown(kpi_card("📥 A receber", formatar_moeda(prev_entrada), "#3b82f6"), unsafe_allow_html=True)
+            with c2:
+                st.markdown(kpi_card("📤 A pagar", formatar_moeda(prev_saida), "#f59e0b"), unsafe_allow_html=True)
+            st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
+            _render_lista_com_quitar("Próximos 30 dias", proximas, "prox")
         else:
-            for id_trans in para_excluir:
-                try:
-                    deletar_transacao(int(id_trans))
-                except RuntimeError as err:
-                    st.error(f"Erro ao excluir #{id_trans}: {err}")
-            st.success(f"{len(para_excluir)} transação(ões) excluída(s).")
-            st.rerun()
+            st.subheader("📅 Próximos 30 dias")
+            st.info("Sem compromissos agendados.")
+
+    st.divider()
+    st.markdown('<span id="compromisos-end" style="display:none"></span>', unsafe_allow_html=True)
+
+    # Gráficos de barras — categorias
+    def _grafico_barras(df_valor, cor):
+        df_valor = df_valor.copy()
+        df_valor["valor_label"] = df_valor["valor"].apply(lambda v: f"R$ {v:,.0f}")
+
+        base = alt.Chart(df_valor).encode(
+            y=alt.Y("categoria:N", sort="-x", title=""),
+        )
+
+        barras = base.mark_bar(color=cor, cornerRadiusTopRight=4, cornerRadiusBottomRight=4).encode(
+            x=alt.X("valor:Q", title="R$",
+                    axis=alt.Axis(format=",.0f", gridColor="rgba(255,255,255,0.04)",
+                                  labelColor="rgba(232,234,240,0.5)", tickColor="transparent")),
+            tooltip=[
+                alt.Tooltip("categoria:N", title="Categoria"),
+                alt.Tooltip("valor:Q", title="Valor", format=",.2f"),
+            ],
+        )
+
+        rotulos = base.mark_text(
+            align="left", baseline="middle", dx=6,
+            color="rgba(232,234,240,0.75)", fontSize=11, fontWeight=500,
+        ).encode(
+            x=alt.X("valor:Q"),
+            text=alt.Text("valor_label:N"),
+        )
+
+        return (
+            (barras + rotulos)
+            .properties(height=alt.Step(30))
+            .configure_view(strokeOpacity=0, fill="#1a1b26")
+            .configure_axis(labelColor="rgba(232,234,240,0.5)", titleColor="rgba(232,234,240,0.4)",
+                            gridColor="rgba(255,255,255,0.04)", domainColor="rgba(255,255,255,0.07)")
+        )
+
+    col_esq, col_dir = st.columns(2)
+
+    with col_esq:
+        st.subheader("Saídas por categoria")
+        df_saidas = df[df["movimentacao"] == "Saída"]
+        if df_saidas.empty:
+            st.caption("Sem saídas neste período.")
+        else:
+            agrupado = df_saidas.groupby("categoria", as_index=False)["valor"].sum()
+            st.altair_chart(_grafico_barras(agrupado, "#ef4444"), use_container_width=True)
+
+    with col_dir:
+        st.subheader("Entradas por categoria")
+        df_entradas = df[df["movimentacao"] == "Entrada"]
+        if df_entradas.empty:
+            st.caption("Sem entradas neste período.")
+        else:
+            agrupado = df_entradas.groupby("categoria", as_index=False)["valor"].sum()
+            st.altair_chart(_grafico_barras(agrupado, "#22c55e"), use_container_width=True)
+
+    st.divider()
+
+    # Evolução mensal
+    st.subheader(f"Evolução mensal de {ano}")
+    dados_ano = listar_evolucao_mensal(ano=ano, responsavel=resp_filtro)
+
+    if not dados_ano:
+        st.caption("Sem dados no ano.")
+    else:
+        df_ano = pd.DataFrame(dados_ano)
+        df_ano["valor"] = pd.to_numeric(df_ano["valor"])
+        df_ano["mes_num"] = pd.to_datetime(df_ano["data"]).dt.month
+
+        if movimentacao_sel:
+            df_ano = df_ano[df_ano["movimentacao"].isin(movimentacao_sel)]
+        if status_sel and "status" in df_ano.columns:
+            df_ano = df_ano[df_ano["status"].isin(status_sel)]
+
+        pivot = (
+            df_ano.groupby(["mes_num", "movimentacao"])["valor"]
+            .sum()
+            .unstack(fill_value=0)
+            .reindex(range(1, 13), fill_value=0)
+        )
+
+        entradas_mes = pivot.get("Entrada", pd.Series(0, index=pivot.index))
+        saidas_mes = pivot.get("Saída", pd.Series(0, index=pivot.index))
+
+        longo = pd.DataFrame({
+            "mes_num": list(range(1, 13)) * 3,
+            "Serie": ["Entradas"] * 12 + ["Saídas"] * 12 + ["Saldo"] * 12,
+            "valor": list(entradas_mes) + list(saidas_mes) + list(entradas_mes - saidas_mes),
+        })
+        longo["mes"] = longo["mes_num"].apply(lambda m: MESES[m - 1])
+        longo["valor_label"] = longo["valor"].apply(lambda v: f"R$ {v:,.0f}")
+
+        base_linha = alt.Chart(longo)
+        cor_scale = alt.Scale(
+            domain=["Entradas", "Saídas", "Saldo"],
+            range=["#22c55e", "#ef4444", "#3b82f6"],
+        )
+        encode_base = dict(
+            x=alt.X("mes:N", sort=MESES, title=""),
+            color=alt.Color("Serie:N", scale=cor_scale, title=""),
+        )
+
+        linhas = base_linha.mark_line(point=True).encode(
+            **encode_base,
+            y=alt.Y("valor:Q", title="R$", axis=alt.Axis(format=",.0f")),
+            tooltip=[
+                alt.Tooltip("mes:N", title="Mês"),
+                alt.Tooltip("Serie:N", title="Série"),
+                alt.Tooltip("valor:Q", title="Valor", format=",.2f"),
+            ],
+        )
+
+        rotulos_linha = base_linha.mark_text(dy=-10, fontSize=11).encode(
+            **encode_base,
+            y=alt.Y("valor:Q"),
+            text=alt.Text("valor_label:N"),
+        )
+
+        grafico = (
+            (linhas + rotulos_linha)
+            .properties(height=350)
+            .configure_view(strokeOpacity=0, fill="#1a1b26")
+            .configure_axis(
+                labelColor="rgba(232,234,240,0.5)",
+                titleColor="rgba(232,234,240,0.4)",
+                gridColor="rgba(255,255,255,0.04)",
+                domainColor="rgba(255,255,255,0.07)",
+            )
+            .configure_legend(
+                labelColor="rgba(232,234,240,0.7)",
+                titleColor="rgba(232,234,240,0.4)",
+            )
+        )
+        st.altair_chart(grafico, use_container_width=True)
+
+    st.divider()
+
+    # Calendário interativo (só quando um mês está selecionado)
+    if mes_sel != "Todos":
+        chave_periodo = (ano, mes_sel)
+        if st.session_state.cal_mes_prev != chave_periodo:
+            st.session_state.cal_dia_sel = None
+            st.session_state.cal_mes_prev = chave_periodo
+
+        dia_sel = st.session_state.cal_dia_sel
+
+        st.markdown('<span id="calendario-start" style="display:none"></span>', unsafe_allow_html=True)
+
+        col_titulo_cal, col_clear = st.columns([5, 2])
+        with col_titulo_cal:
+            st.subheader(f"Calendário de {titulo_periodo}")
+        with col_clear:
+            if dia_sel:
+                st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+                if st.button(
+                    f"✕ {dia_sel:02d}/{MESES[mes_sel-1]} — limpar filtro",
+                    key="cal_clear",
+                    use_container_width=True,
+                ):
+                    st.session_state.cal_dia_sel = None
+                    st.rerun()
+
+        por_dia = (
+            df.groupby([df["data"].apply(lambda d: d.day), "movimentacao"])["valor"]
+            .sum()
+            .unstack(fill_value=0)
+        )
+        entradas_dia = por_dia.get("Entrada", {}).to_dict() if "Entrada" in por_dia.columns else {}
+        saidas_dia   = por_dia.get("Saída",   {}).to_dict() if "Saída"   in por_dia.columns else {}
+
+        cal_obj   = calendar.Calendar(firstweekday=0)
+        semanas   = cal_obj.monthdayscalendar(ano, mes_sel)
+        DIAS_SEMANA = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+        hoje_dia  = hoje.day if (mes_sel == hoje.month and ano == hoje.year) else -1
+
+        cols_header = st.columns(7)
+        for i, nome in enumerate(DIAS_SEMANA):
+            cor_header = "#a5b4fc" if i >= 5 else "rgba(232,234,240,0.4)"
+            cols_header[i].markdown(
+                f"<div style='text-align:center;font-size:11px;font-weight:600;"
+                f"letter-spacing:0.06em;color:{cor_header};padding:4px 0'>{nome}</div>",
+                unsafe_allow_html=True,
+            )
+
+        for semana in semanas:
+            cols = st.columns(7)
+            for i, dia in enumerate(semana):
+                with cols[i]:
+                    if dia == 0:
+                        st.markdown(
+                            "<div style='min-height:68px;border-radius:9px;"
+                            "background:rgba(255,255,255,0.02);margin:2px 0'></div>",
+                            unsafe_allow_html=True,
+                        )
+                        continue
+
+                    entrada = entradas_dia.get(dia, 0)
+                    saida   = saidas_dia.get(dia, 0)
+                    e_hoje  = (dia == hoje_dia)
+
+                    marcador_hoje = " 🔵" if e_hoje else ""
+                    label_partes  = [f"{dia}{marcador_hoje}"]
+
+                    if entrada:
+                        v = formatar_moeda(entrada).replace("R$ ", "").replace("R$ ", "")
+                        label_partes.append(f"+R${v}")
+                    if saida:
+                        v = formatar_moeda(saida).replace("R$ ", "").replace("R$ ", "")
+                        label_partes.append(f"-R${v}")
+
+                    label      = "\n".join(label_partes)
+                    selecionado = (dia_sel == dia)
+
+                    if st.button(
+                        label,
+                        key=f"cal_{ano}_{mes_sel}_{dia}",
+                        type="primary" if selecionado else "secondary",
+                        use_container_width=True,
+                    ):
+                        st.session_state.cal_dia_sel = None if selecionado else dia
+                        st.rerun()
+
+        st.divider()
+        st.markdown('<span id="calendario-end" style="display:none"></span>', unsafe_allow_html=True)
+
+    # Tabela com edição e exclusão
+    _dia_ativo = st.session_state.get("cal_dia_sel") if mes_sel != "Todos" else None
+    df_tabela = df[df["data"].apply(lambda d: d.day) == _dia_ativo].copy() if _dia_ativo else df.copy()
+
+    if _dia_ativo:
+        subtitulo_tab = f"{_dia_ativo:02d}/{MESES[mes_sel-1]}/{ano} — clique no dia novamente para limpar"
+        badge = (f"<span style='background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.35);"
+                 f"border-radius:100px;padding:2px 10px;font-size:10px;color:#a5b4fc;"
+                 f"margin-left:8px'>{_dia_ativo:02d}/{MESES[mes_sel-1]}</span>")
+    else:
+        subtitulo_tab = titulo_periodo
+        badge = ""
+
+    st.markdown(f"""
+    <div style="background:#1a1b26;border:1px solid rgba(255,255,255,0.07);
+                border-radius:10px 10px 0 0;padding:14px 18px 12px;
+                border-bottom:1px solid rgba(255,255,255,0.07)">
+        <div style="font-size:13px;font-weight:600;color:#e8eaf0">Transações{badge}</div>
+        <div style="font-size:11px;color:rgba(232,234,240,0.35);margin-top:2px">{subtitulo_tab}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    colunas_visiveis = ["id", "data", "movimentacao", "categoria", "descricao",
+                        "valor", "responsavel", "telefone", "fonte", "parcelas", "status"]
+
+    if "telefone" not in df_tabela.columns:
+        df_tabela = df_tabela.copy()
+        df_tabela["telefone"] = None
+
+    df_editavel = df_tabela[colunas_visiveis].copy()
+    df_editavel["data"] = df_editavel["data"].apply(lambda d: d.strftime("%d/%m/%Y"))
+    df_editavel["excluir"] = False
+
+    _cats_tabela = sorted(set(_get_categorias("Saída") + _get_categorias("Entrada")))
+
+    editado = st.data_editor(
+        df_editavel,
+        width="stretch",
+        hide_index=True,
+        disabled=["id", "data", "telefone"],
+        column_config={
+            "movimentacao": st.column_config.SelectboxColumn(
+                options=["Entrada", "Saída"], required=True),
+            "responsavel": st.column_config.SelectboxColumn(
+                options=["Y", "M", "MY"], required=True),
+            "fonte": st.column_config.SelectboxColumn(
+                options=["Dinheiro", "Cartão Crédito"], required=True),
+            "status": st.column_config.SelectboxColumn(
+                options=["Pago", "Recebido", "A pagar", "A receber", "Atrasado"],
+                required=True),
+            "categoria": st.column_config.SelectboxColumn(
+                options=_cats_tabela, required=True) if _cats_tabela else None,
+            "valor": st.column_config.NumberColumn(format="R$ %.2f", min_value=0.01),
+            "telefone": st.column_config.TextColumn("Telefone", disabled=True),
+            "excluir": st.column_config.CheckboxColumn("🗑️"),
+        },
+        key="tabela_edicao",
+    )
+
+    col_s, col_d = st.columns(2)
+
+    with col_s:
+        if st.button("💾 Salvar alterações", type="primary", use_container_width=True):
+            alteracoes = 0
+            original = df_tabela[colunas_visiveis].set_index("id")
+            novo = editado.set_index("id")
+
+            for id_trans in novo.index:
+                linha_original = original.loc[id_trans].to_dict()
+                linha_nova = novo.loc[id_trans].drop("excluir").to_dict()
+
+                diff = {k: v for k, v in linha_nova.items()
+                        if k != "data" and str(linha_original.get(k, "")) != str(v)}
+
+                if diff:
+                    if "valor" in diff:
+                        diff["valor"] = float(diff["valor"])
+                    try:
+                        atualizar_transacao(int(id_trans), diff)
+                        alteracoes += 1
+                    except RuntimeError as err:
+                        st.error(f"Erro ao atualizar #{id_trans}: {err}")
+
+            if alteracoes:
+                st.success(f"{alteracoes} transação(ões) atualizada(s).")
+                st.rerun()
+            else:
+                st.info("Nenhuma alteração detectada.")
+
+    with col_d:
+        if st.button("🗑️ Excluir marcadas", use_container_width=True):
+            para_excluir = editado[editado["excluir"]]["id"].tolist()
+            if not para_excluir:
+                st.info("Nenhuma transação marcada para exclusão.")
+            else:
+                for id_trans in para_excluir:
+                    try:
+                        deletar_transacao(int(id_trans))
+                    except RuntimeError as err:
+                        st.error(f"Erro ao excluir #{id_trans}: {err}")
+                st.success(f"{len(para_excluir)} transação(ões) excluída(s).")
+                st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PÁGINA: CONFERÊNCIA
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "🔍 Conferência":
+    st.title("🔍 Conferência e Validação")
+    st.caption(titulo_periodo)
+
+    # --- Cards de resumo ---
+    df_saida = df[df["movimentacao"] == "Saída"]
+    df_entrada = df[df["movimentacao"] == "Entrada"]
+
+    n_fixas    = len(df_saida[df_saida["tipo"] == "D. Fixa"])
+    n_parcelas = len(df_saida[df_saida["tipo"] == "Parcelado"])
+    n_unicas   = len(df_saida[df_saida["tipo"] == "P. Unico"])
+    n_entradas = len(df_entrada)
+
+    val_fixas    = df_saida[df_saida["tipo"] == "D. Fixa"]["valor"].sum()
+    val_parcelas = df_saida[df_saida["tipo"] == "Parcelado"]["valor"].sum()
+    val_unicas   = df_saida[df_saida["tipo"] == "P. Unico"]["valor"].sum()
+    val_entradas = df_entrada["valor"].sum()
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.markdown(kpi_card(
+            f"🔁 Despesas Fixas · {n_fixas}",
+            formatar_moeda(val_fixas), "#f59e0b"
+        ), unsafe_allow_html=True)
+    with c2:
+        st.markdown(kpi_card(
+            f"📦 Parcelas · {n_parcelas}",
+            formatar_moeda(val_parcelas), "#a78bfa"
+        ), unsafe_allow_html=True)
+    with c3:
+        st.markdown(kpi_card(
+            f"💸 Despesas Únicas · {n_unicas}",
+            formatar_moeda(val_unicas), "#ef4444"
+        ), unsafe_allow_html=True)
+    with c4:
+        st.markdown(kpi_card(
+            f"💚 Entradas · {n_entradas}",
+            formatar_moeda(val_entradas), "#22c55e"
+        ), unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("📋 Todas as Movimentações")
+
+    # --- Tabela editável ---
+    todas_cats = sorted(set(_get_categorias("Saída") + _get_categorias("Entrada")))
+
+    df_conf = df.copy()
+    df_conf["excluir"] = False
+    # Garante coluna telefone
+    if "telefone" not in df_conf.columns:
+        df_conf["telefone"] = None
+
+    colunas_conf = ["excluir", "id", "data", "movimentacao", "responsavel", "tipo",
+                    "categoria", "descricao", "valor", "parcelas", "fonte", "status"]
+    df_conf = df_conf.reindex(columns=colunas_conf + [c for c in df_conf.columns if c not in colunas_conf])
+
+    # Guarda referência original para comparar mudanças
+    df_orig = df.copy()
+
+    editado_conf = st.data_editor(
+        df_conf[colunas_conf],
+        hide_index=True,
+        use_container_width=True,
+        height=600,
+        disabled=["id"],
+        column_config={
+            "excluir":      st.column_config.CheckboxColumn("🗑️", width="small"),
+            "id":           st.column_config.NumberColumn("ID", disabled=True, width="small"),
+            "data":         st.column_config.DateColumn("Data", width="small"),
+            "movimentacao": st.column_config.SelectboxColumn("Mov.", options=["Saída", "Entrada"], width="small"),
+            "responsavel":  st.column_config.SelectboxColumn("Resp.", options=["Y", "M", "MY"], width="small"),
+            "tipo":         st.column_config.SelectboxColumn(
+                "Tipo",
+                options=["P. Unico", "D. Fixa", "Parcelado", "Receita Fixa", "Receita Variável"],
+                width="medium",
+            ),
+            "categoria":    st.column_config.SelectboxColumn("Categoria", options=todas_cats, width="medium"),
+            "descricao":    st.column_config.TextColumn("Descrição", width="large"),
+            "valor":        st.column_config.NumberColumn("Valor", format="R$ %.2f", width="small"),
+            "parcelas":     st.column_config.TextColumn("Parcelas", width="small"),
+            "fonte":        st.column_config.SelectboxColumn(
+                "Fonte", options=["Dinheiro", "Cartão Crédito"], width="small"),
+            "status":       st.column_config.SelectboxColumn(
+                "Status",
+                options=["Pago", "A pagar", "Atrasado", "Recebido", "A receber"],
+                width="small",
+            ),
+        },
+        key="conf_editor",
+    )
+
+    col_s, col_d, _ = st.columns([1, 1, 5])
+
+    with col_s:
+        if st.button("💾 Salvar Alterações", use_container_width=True, type="primary"):
+            campos = ["movimentacao", "responsavel", "tipo", "categoria",
+                      "descricao", "valor", "fonte", "status", "parcelas", "data"]
+            alteracoes = 0
+            erros = 0
+
+            orig_idx = df_orig.set_index("id")
+
+            for i, row_edit in editado_conf.iterrows():
+                id_trans = int(row_edit["id"])
+                if id_trans not in orig_idx.index:
+                    continue
+
+                row_orig = orig_idx.loc[id_trans]
+                mudancas = {}
+
+                for campo in campos:
+                    v_edit = row_edit.get(campo)
+                    v_orig = row_orig.get(campo)
+                    if campo == "data":
+                        v_edit = str(v_edit)[:10] if v_edit is not None else None
+                        v_orig = str(v_orig)[:10] if v_orig is not None else None
+                    if str(v_edit) != str(v_orig):
+                        mudancas[campo] = v_edit
+
+                if mudancas:
+                    try:
+                        atualizar_transacao(id_trans, mudancas)
+                        alteracoes += 1
+                    except Exception as e:
+                        erros += 1
+                        st.error(f"Erro ao atualizar #{id_trans}: {e}")
+
+            if erros == 0 and alteracoes > 0:
+                st.success(f"✅ {alteracoes} transação(ões) salva(s).")
+                st.rerun()
+            elif erros == 0:
+                st.info("Nenhuma alteração detectada.")
+
+    with col_d:
+        if st.button("🗑️ Excluir marcadas", use_container_width=True):
+            para_excluir = editado_conf[editado_conf["excluir"]]["id"].tolist()
+            if para_excluir:
+                for id_excluir in para_excluir:
+                    deletar_transacao(int(id_excluir))
+                st.success(f"🗑️ {len(para_excluir)} transação(ões) excluída(s).")
+                st.rerun()
+            else:
+                st.warning("Marque transações para excluir.")
